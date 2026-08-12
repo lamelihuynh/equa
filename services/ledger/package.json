@@ -16,7 +16,7 @@
     "@nestjs/common": "11.1.29",
     "@nestjs/core": "11.1.29",
     "@nestjs/platform-fastify": "11.1.29",
-    "fastify": "5.6.2",
+    "fastify": "5.11.3",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2"
   },
