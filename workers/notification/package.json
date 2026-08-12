@@ -1,0 +1,20 @@
+{
+  "name": "@equa/notification-worker",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/main.ts",
+    "lint": "eslint src",
+    "start": "node dist/main.js",
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@equa/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "4.23.12"
+  }
+}

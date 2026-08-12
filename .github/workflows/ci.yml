@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm ci
+
+  compose:
+    name: Infrastructure smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate Compose rendering
+        run: docker compose --env-file .env.example -f infra/compose/docker-compose.yml config --quiet
+      - name: Start core infrastructure
+        run: docker compose --env-file .env.example -f infra/compose/docker-compose.yml up -d --wait postgres redis rabbitmq kong
+      - name: Show diagnostics on failure
+        if: failure()
+        run: docker compose --env-file .env.example -f infra/compose/docker-compose.yml ps && docker compose --env-file .env.example -f infra/compose/docker-compose.yml logs --tail=200
+      - name: Stop infrastructure
+        if: always()
+        run: docker compose --env-file .env.example -f infra/compose/docker-compose.yml down -v

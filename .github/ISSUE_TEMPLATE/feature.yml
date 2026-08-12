@@ -1,0 +1,31 @@
+name: Feature
+description: Theo dõi một yêu cầu từ SRS đến triển khai và kiểm thử
+title: '[FR] '
+labels: [feature]
+body:
+  - type: input
+    id: requirement
+    attributes:
+      label: Requirement ID
+      placeholder: FR-EXP-001
+    validations:
+      required: true
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Bounded context
+      options: [identity, ledger, platform, notification, web, mobile]
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: test
+    attributes:
+      label: Test strategy
+    validations:
+      required: true

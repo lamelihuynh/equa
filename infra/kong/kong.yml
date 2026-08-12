@@ -1,0 +1,72 @@
+_format_version: '3.0'
+_transform: true
+
+plugins:
+  - name: correlation-id
+    config:
+      header_name: X-Correlation-ID
+      generator: uuid
+      echo_downstream: true
+  - name: cors
+    config:
+      origins:
+        - http://localhost:3000
+      headers:
+        - Accept
+        - Authorization
+        - Content-Type
+        - Idempotency-Key
+        - X-Correlation-ID
+      exposed_headers:
+        - X-Correlation-ID
+      credentials: true
+      max_age: 3600
+  - name: request-size-limiting
+    config:
+      allowed_payload_size: 5
+      size_unit: megabytes
+  - name: rate-limiting
+    config:
+      minute: 300
+      policy: redis
+      redis:
+        host: redis
+        port: 6379
+
+services:
+  - name: identity-service
+    url: http://host.docker.internal:3001
+    routes:
+      - name: identity-routes
+        paths:
+          - /v1/auth
+          - /v1/profile
+          - /v1/identity
+        strip_path: false
+
+  - name: ledger-service
+    url: http://host.docker.internal:3002
+    routes:
+      - name: ledger-routes
+        paths:
+          - /v1/friends
+          - /v1/groups
+          - /v1/expenses
+          - /v1/balances
+          - /v1/settlements
+          - /v1/sync
+          - /v1/ledger
+        strip_path: false
+
+  - name: platform-service
+    url: http://host.docker.internal:3003
+    routes:
+      - name: platform-routes
+        paths:
+          - /v1/subscriptions
+          - /v1/payments
+          - /v1/currency
+          - /v1/receipts
+          - /v1/admin
+          - /v1/platform
+        strip_path: false
