@@ -39,9 +39,11 @@ services:
     routes:
       - name: identity-routes
         paths:
+          - /health
           - /v1/auth
           - /v1/profile
           - /v1/identity
+          - /v1/docs
         strip_path: false
 
   - name: ledger-service
