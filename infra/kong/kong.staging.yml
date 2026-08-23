@@ -1,0 +1,50 @@
+_format_version: '3.0'
+_transform: true
+
+plugins:
+  - name: correlation-id
+    config:
+      header_name: X-Correlation-ID
+      generator: uuid
+      echo_downstream: true
+
+  - name: cors
+    config:
+      origins:
+        - http://localhost:3000
+      headers:
+        - Accept
+        - Authorization
+        - Content-Type
+        - Idempotency-Key
+        - X-Correlation-ID
+      exposed_headers:
+        - X-Correlation-ID
+      credentials: true
+      max_age: 3600
+
+  - name: request-size-limiting
+    config:
+      allowed_payload_size: 5
+      size_unit: megabytes
+
+  - name: rate-limiting
+    config:
+      minute: 300
+      policy: redis
+      redis:
+        host: red-da5n7k6k1f9s73953u9g
+        port: 6379
+
+services:
+  - name: identity-service
+    url: https://equa-identity-sha.onrender.com
+    routes:
+      - name: identity-routes
+        paths:
+          - /health
+          - /v1/auth
+          - /v1/profile
+          - /v1/identity
+          - /v1/docs
+        strip_path: false
