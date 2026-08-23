@@ -9,6 +9,7 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'automatic',
   ios: { bundleIdentifier: 'app.equa.mobile', supportsTablet: true },
   android: { package: 'app.equa.mobile' },
+  plugins: ['expo-secure-store'],
   web: { bundler: 'metro' },
 };
 

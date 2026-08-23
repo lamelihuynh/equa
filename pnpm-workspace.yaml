@@ -6,5 +6,7 @@ packages:
 
 allowBuilds:
   '@nestjs/core': true
+  '@scarf/scarf': false
+  argon2: true
   esbuild: true
   unrs-resolver: true
