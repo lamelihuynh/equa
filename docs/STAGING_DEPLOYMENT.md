@@ -13,6 +13,9 @@ Runtime secret bắt buộc trên Render: `IDENTITY_DATABASE_URL`, `IDENTITY_JWT
 `RESEND_API_KEY`, `EMAIL_FROM`, `APP_WEB_URL` và các giá trị Redis/MinIO riêng cho dịch vụ. Không đưa
 bất kỳ giá trị nào trong số này vào repository.
 
+Trên Vercel staging, đặt `NEXT_PUBLIC_AVATAR_ORIGIN` bằng origin HTTPS công khai của MinIO/S3 staging.
+Web chỉ render avatar từ origin này, dù URL đọc object được Identity ký có thời hạn.
+
 Render cấp biến `PORT` cho Web Service; Identity ưu tiên lắng nghe biến này. Không đặt URL local hoặc
 `host.docker.internal` vào bất kỳ biến môi trường staging nào.
 

@@ -14,6 +14,7 @@ const groups: Array<[string, string, string, string]> = [
   ['Movie night', '5 thành viên · 2 khoản chi', '+$91.75', 'MN'],
 ];
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/v1';
+const avatarOrigin = process.env.NEXT_PUBLIC_AVATAR_ORIGIN ?? 'http://localhost:9000';
 type Profile = { displayName: string; avatarKey: string | null; defaultCurrency: string; locale: string; timezone: string };
 
 function Mark() { return <span className="equaMark smallMark"><svg viewBox="0 0 42 42" aria-hidden="true"><path d="M9 17.5h24" /><path d="M9 24.5h24" /><path d="M12 12c4.8-4.6 13.2-4.6 18 0" /><path d="M12 30c4.8 4.6 13.2 4.6 18 0" /></svg></span>; }
@@ -40,7 +41,7 @@ export default function DashboardPage() {
             headers: { Authorization: `Bearer ${token}`, 'X-Correlation-ID': crypto.randomUUID() },
           });
           const avatarResult: unknown = await avatarResponse.json();
-          if (isAvatarUrl(avatarResult)) setAvatarUrl(avatarResult.url);
+          setAvatarUrl(trustedAvatarUrl(avatarResult));
         }
       }
     })();
@@ -68,5 +69,15 @@ export default function DashboardPage() {
 }
 
 function isProfile(value: unknown): value is Profile { return typeof value === 'object' && value !== null && 'displayName' in value && 'avatarKey' in value && 'defaultCurrency' in value && 'locale' in value && 'timezone' in value; }
-function isAvatarUrl(value: unknown): value is { url: string | null } { return typeof value === 'object' && value !== null && 'url' in value && (typeof value.url === 'string' || value.url === null); }
+function trustedAvatarUrl(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || !('url' in value) || typeof value.url !== 'string') return null;
+  try {
+    const candidate = new URL(value.url);
+    const allowed = new URL(avatarOrigin);
+    if (candidate.origin !== allowed.origin || !candidate.pathname.startsWith('/equa-avatars/')) return null;
+    return candidate.toString();
+  } catch {
+    return null;
+  }
+}
 function formatMoney(value: number, currency: string, locale?: string): string { return new Intl.NumberFormat(locale === 'vi' ? 'vi-VN' : 'en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value); }
