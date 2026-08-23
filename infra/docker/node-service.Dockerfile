@@ -19,6 +19,6 @@ ENV NODE_ENV=production
 WORKDIR /app
 RUN addgroup -S equa && adduser -S equa -G equa
 COPY --from=build --chown=equa:equa /opt/equa/ ./
+COPY --chmod=0555 infra/docker/start-node-service.sh /usr/local/bin/start-node-service
 USER equa
-CMD ["node", "dist/main.js"]
-
+CMD ["/usr/local/bin/start-node-service"]
