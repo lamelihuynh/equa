@@ -26,6 +26,7 @@ jobs:
       - run: pnpm --filter @equa/identity-service lint
       - run: pnpm --filter @equa/identity-service typecheck
       - run: pnpm --filter @equa/identity-service test:coverage
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
