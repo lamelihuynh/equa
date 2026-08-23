@@ -11,8 +11,8 @@ RUN pnpm install --frozen-lockfile
 ARG PACKAGE_NAME
 RUN test -n "$PACKAGE_NAME"
 RUN pnpm --filter "$PACKAGE_NAME"... build
-RUN pnpm --filter "$PACKAGE_NAME" deploy --prod /opt/equa
-
+RUN pnpm --config.inject-workspace-packages=true \
+  --filter "$PACKAGE_NAME" deploy --prod /opt/equa
 FROM node:24.18.0-alpine AS runtime
 
 ENV NODE_ENV=production
