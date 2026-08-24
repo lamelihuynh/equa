@@ -11,6 +11,7 @@ plugins:
   - name: cors
     config:
       origins:
+        - https://staging.equa.io.vn
         - https://equa-web-staging.vercel.app
         - http://localhost:3000
       headers:
