@@ -21,12 +21,14 @@ export interface UserRow {
   default_currency: string;
   locale: string;
   timezone: string;
+  bio: string;
 }
 export interface ProfileResponse {
   id: string;
   email: string;
   displayName: string;
   avatarKey: string | null;
+  bio: string;
   defaultCurrency: string;
   locale: string;
   timezone: string;
@@ -321,17 +323,19 @@ export class AuthService {
       locale?: string;
       timezone?: string;
       avatarKey?: string;
+      bio?: string;
     },
   ): Promise<ProfileResponse> {
     const current = await this.userById(userId);
     await this.database.query(
-      `UPDATE user_profiles SET display_name=$1, default_currency=$2, locale=$3, timezone=$4, avatar_key=$5, updated_at=now() WHERE user_id=$6`,
+      `UPDATE user_profiles SET display_name=$1, default_currency=$2, locale=$3, timezone=$4, avatar_key=$5, bio=$6, updated_at=now() WHERE user_id=$7`,
       [
         input.displayName?.trim() ?? current.display_name,
         input.defaultCurrency ?? current.default_currency,
         input.locale ?? current.locale,
         input.timezone ?? current.timezone,
         input.avatarKey ?? current.avatar_key,
+        input.bio?.trim() ?? current.bio,
         userId,
       ],
     );
@@ -419,7 +423,7 @@ export class AuthService {
   }
 
   private userSelect(): string {
-    return 'SELECT u.id,u.email,u.password_hash,u.status,u.roles,p.display_name,p.avatar_key,p.default_currency,p.locale,p.timezone FROM users u JOIN user_profiles p ON p.user_id = u.id';
+    return 'SELECT u.id,u.email,u.password_hash,u.status,u.roles,p.display_name,p.avatar_key,p.default_currency,p.locale,p.timezone,p.bio FROM users u JOIN user_profiles p ON p.user_id = u.id';
   }
 
   private toProfile(user: UserRow): ProfileResponse {
@@ -428,6 +432,7 @@ export class AuthService {
       email: user.email,
       displayName: user.display_name,
       avatarKey: user.avatar_key,
+      bio: user.bio,
       defaultCurrency: user.default_currency,
       locale: user.locale,
       timezone: user.timezone,
