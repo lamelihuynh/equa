@@ -30,3 +30,7 @@ if (/=(?:changeme|password|secret)$/imu.test(envExample)) {
 }
 
 console.log(`Scaffold check passed (${required.length} required files).`);
+
+
+
+

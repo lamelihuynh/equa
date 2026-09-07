@@ -50,3 +50,4 @@ services:
           - /v1/identity
           - /v1/docs
         strip_path: false
+
