@@ -48,4 +48,6 @@ export class UpdateProfileDto {
   @IsOptional() @IsString() @Length(1, 100) timezone?: string;
   @ApiPropertyOptional({ type: String, example: 'avatars/user-id/avatar.png', minLength: 1, maxLength: 500 })
   @IsOptional() @IsString() @Length(1, 500) avatarKey?: string;
+  @ApiPropertyOptional({ type: String, example: 'Expense planning enthusiast', maxLength: 500 })
+  @IsOptional() @IsString() @Length(0, 500) bio?: string;
 }
