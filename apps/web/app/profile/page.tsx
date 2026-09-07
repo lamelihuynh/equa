@@ -6,11 +6,33 @@ import type { ChangeEvent, FormEvent } from 'react';
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/v1';
 const avatarOrigin = process.env.NEXT_PUBLIC_AVATAR_ORIGIN ?? 'http://localhost:9000';
+
+const currencies = [
+  { value: 'VND', label: 'VND — Việt Nam đồng' },
+  { value: 'USD', label: 'USD — US Dollar' },
+  { value: 'EUR', label: 'EUR — Euro' },
+  { value: 'JPY', label: 'JPY — Japanese Yen' },
+  { value: 'KRW', label: 'KRW — Korean Won' },
+  { value: 'GBP', label: 'GBP — Pound Sterling' },
+  { value: 'SGD', label: 'SGD — Singapore Dollar' },
+];
+
+const timezones = [
+  { value: 'Asia/Ho_Chi_Minh', label: '(UTC+07:00) Ho Chi Minh City' },
+  { value: 'Asia/Tokyo', label: '(UTC+09:00) Tokyo' },
+  { value: 'Asia/Seoul', label: '(UTC+09:00) Seoul' },
+  { value: 'Europe/Paris', label: '(UTC+01:00) Paris' },
+  { value: 'Europe/London', label: '(UTC+00:00) London' },
+  { value: 'America/New_York', label: '(UTC-05:00) New York' },
+  { value: 'America/Los_Angeles', label: '(UTC-08:00) Los Angeles' },
+];
+
 type Profile = {
   id: string;
   email: string;
   displayName: string;
   avatarKey: string | null;
+  bio: string;
   defaultCurrency: string;
   locale: string;
   timezone: string;
@@ -82,6 +104,7 @@ export default function ProfilePage() {
           defaultCurrency: data.get('defaultCurrency'),
           locale: data.get('locale'),
           timezone: data.get('timezone'),
+          bio: data.get('bio'),
         }),
       });
       if (handleUnauthorized(response)) return;
@@ -159,9 +182,14 @@ export default function ProfilePage() {
         <form className="profileForm" onSubmit={(event) => { void save(event); }}>
           <label>Tên hiển thị<input name="displayName" defaultValue={profile.displayName} required maxLength={100} /></label>
           <label>Email<input value={profile.email} disabled /></label>
-          <label>Tiền tệ mặc định<select name="defaultCurrency" defaultValue={profile.defaultCurrency}><option value="VND">VND — Việt Nam đồng</option><option value="USD">USD — US Dollar</option><option value="EUR">EUR — Euro</option></select></label>
+          <label className="fullWidth">Giới thiệu<textarea name="bio" defaultValue={profile.bio} placeholder="Một chút về bạn..." maxLength={500} /></label>
+          <label>Tiền tệ mặc định<select name="defaultCurrency" defaultValue={profile.defaultCurrency}>
+            {currencies.map((c) => (<option key={c.value} value={c.value}>{c.label}</option>))}
+          </select></label>
           <label>Ngôn ngữ<select name="locale" defaultValue={profile.locale}><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="es">Español</option><option value="pt">Português</option><option value="ja">日本語</option></select></label>
-          <label className="fullWidth">Múi giờ<input name="timezone" defaultValue={profile.timezone} required placeholder="Asia/Ho_Chi_Minh" /></label>
+          <label className="fullWidth">Múi giờ<select name="timezone" defaultValue={profile.timezone}>
+            {timezones.map((tz) => (<option key={tz.value} value={tz.value}>{tz.label}</option>))}
+          </select></label>
           <div className="profileActions"><button className="primaryBtn" disabled={saving}>{saving ? 'Đang lưu…' : 'Lưu thay đổi'}</button></div>
         </form>
         {message && <p className="formMessage" role="status">{message}</p>}
