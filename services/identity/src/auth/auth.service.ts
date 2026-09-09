@@ -13,6 +13,7 @@ import type { AuthTokens, RequestMetadata } from './auth.types';
 export interface UserRow {
   id: string;
   email: string;
+  username: string | null;
   password_hash: string;
   status: string;
   roles: string[];
@@ -26,6 +27,7 @@ export interface UserRow {
 export interface ProfileResponse {
   id: string;
   email: string;
+  username: string | null;
   displayName: string;
   avatarKey: string | null;
   bio: string;
@@ -54,14 +56,15 @@ export class AuthService {
   ) {}
 
   async register(
-    input: { email: string; password: string; displayName: string },
+    input: { email: string; password: string; displayName: string; username?: string },
     metadata: RequestMetadata,
   ): Promise<{ userId: string; verificationSent: true }> {
     assertPasswordPolicy(input.password);
     const email = input.email.trim().toLowerCase();
+    const username = input.username?.trim().toLowerCase() || null;
     const existing = await this.database.query<{ id: string }>(
-      'SELECT id FROM users WHERE email = $1',
-      [email],
+      'SELECT id FROM users WHERE email = $1 OR ($2 IS NOT NULL AND lower(username) = $2)',
+      [email, username],
     );
     if (existing.rowCount)
       throw new ApiException(
@@ -72,14 +75,30 @@ export class AuthService {
     const userId = this.tokenService.createId();
     const verificationToken = this.tokenService.createOpaqueToken();
     const passwordHash = await argon2.hash(input.password, { type: argon2.argon2id });
-    await this.database.query(
-      'INSERT INTO users (id,email,password_hash,status) VALUES ($1,$2,$3,$4)',
-      [userId, email, passwordHash, 'UNVERIFIED'],
-    );
-    await this.database.query('INSERT INTO user_profiles (user_id,display_name) VALUES ($1,$2)', [
-      userId,
-      input.displayName.trim(),
-    ]);
+    try {
+      await this.database.transaction(async (client) => {
+        await client.query(
+          'INSERT INTO users (id,email,username,password_hash,status) VALUES ($1,$2,$3,$4,$5)',
+          [userId, email, username, passwordHash, 'UNVERIFIED'],
+        );
+        await client.query('INSERT INTO user_profiles (user_id,display_name) VALUES ($1,$2)', [
+          userId,
+          input.displayName.trim(),
+        ]);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error))
+        throw new ApiException(
+          username && isUsernameViolation(error)
+            ? 'AUTH_USERNAME_ALREADY_EXISTS'
+            : 'AUTH_EMAIL_ALREADY_EXISTS',
+          username && isUsernameViolation(error)
+            ? 'An account already exists for this username.'
+            : 'An account already exists for this email.',
+          HttpStatus.CONFLICT,
+        );
+      throw error;
+    }
     await this.storeVerificationToken(userId, verificationToken);
     await this.email.sendVerification(email, verificationToken);
     await this.audit.record({
@@ -319,6 +338,7 @@ export class AuthService {
     userId: string,
     input: {
       displayName?: string;
+      username?: string;
       defaultCurrency?: string;
       locale?: string;
       timezone?: string;
@@ -327,18 +347,36 @@ export class AuthService {
     },
   ): Promise<ProfileResponse> {
     const current = await this.userById(userId);
-    await this.database.query(
-      `UPDATE user_profiles SET display_name=$1, default_currency=$2, locale=$3, timezone=$4, avatar_key=$5, bio=$6, updated_at=now() WHERE user_id=$7`,
-      [
-        input.displayName?.trim() ?? current.display_name,
-        input.defaultCurrency ?? current.default_currency,
-        input.locale ?? current.locale,
-        input.timezone ?? current.timezone,
-        input.avatarKey ?? current.avatar_key,
-        input.bio?.trim() ?? current.bio,
-        userId,
-      ],
-    );
+    const username = input.username?.trim().toLowerCase() ?? current.username;
+    try {
+      await this.database.transaction(async (client) => {
+        if (input.username !== undefined)
+          await client.query('UPDATE users SET username=$1,updated_at=now() WHERE id=$2', [
+            username,
+            userId,
+          ]);
+        await client.query(
+          `UPDATE user_profiles SET display_name=$1, default_currency=$2, locale=$3, timezone=$4, avatar_key=$5, bio=$6, updated_at=now() WHERE user_id=$7`,
+          [
+            input.displayName?.trim() ?? current.display_name,
+            input.defaultCurrency ?? current.default_currency,
+            input.locale ?? current.locale,
+            input.timezone ?? current.timezone,
+            input.avatarKey ?? current.avatar_key,
+            input.bio?.trim() ?? current.bio,
+            userId,
+          ],
+        );
+      });
+    } catch (error) {
+      if (isUniqueViolation(error))
+        throw new ApiException(
+          'AUTH_USERNAME_ALREADY_EXISTS',
+          'An account already exists for this username.',
+          HttpStatus.CONFLICT,
+        );
+      throw error;
+    }
     return this.toProfile(await this.userById(userId));
   }
 
@@ -366,6 +404,7 @@ export class AuthService {
         sub: user.id,
         roles: user.roles,
         email: user.email,
+        username: user.username,
       }),
       refreshToken,
       refreshExpiresAt: expires.toISOString(),
@@ -423,13 +462,14 @@ export class AuthService {
   }
 
   private userSelect(): string {
-    return 'SELECT u.id,u.email,u.password_hash,u.status,u.roles,p.display_name,p.avatar_key,p.default_currency,p.locale,p.timezone,p.bio FROM users u JOIN user_profiles p ON p.user_id = u.id';
+    return 'SELECT u.id,u.email,u.username,u.password_hash,u.status,u.roles,p.display_name,p.avatar_key,p.default_currency,p.locale,p.timezone,p.bio FROM users u JOIN user_profiles p ON p.user_id = u.id';
   }
 
   private toProfile(user: UserRow): ProfileResponse {
     return {
       id: user.id,
       email: user.email,
+      username: user.username,
       displayName: user.display_name,
       avatarKey: user.avatar_key,
       bio: user.bio,
@@ -439,4 +479,18 @@ export class AuthService {
       roles: user.roles,
     };
   }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
+}
+
+function isUsernameViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'constraint' in error &&
+    typeof error.constraint === 'string' &&
+    error.constraint.includes('username')
+  );
 }

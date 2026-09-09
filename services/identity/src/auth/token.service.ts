@@ -8,6 +8,7 @@ export interface AccessClaims {
   sub: string;
   roles: string[];
   email: string;
+  username?: string | null;
 }
 
 @Injectable()
@@ -25,7 +26,11 @@ export class TokenService {
   }
 
   async signAccessToken(claims: AccessClaims): Promise<string> {
-    return new SignJWT({ roles: claims.roles, email: claims.email })
+    return new SignJWT({
+      roles: claims.roles,
+      email: claims.email,
+      username: claims.username ?? null,
+    })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setSubject(claims.sub)
       .setIssuer(this.config.jwtIssuer)
@@ -46,6 +51,7 @@ export class TokenService {
         ? payload.roles.filter((role): role is string => typeof role === 'string')
         : [],
       email: typeof payload.email === 'string' ? payload.email : '',
+      username: typeof payload.username === 'string' ? payload.username : null,
     };
   }
 }

@@ -1,12 +1,14 @@
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
+  username TEXT,
   password_hash TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('UNVERIFIED', 'ACTIVE', 'DISABLED')),
   roles TEXT[] NOT NULL DEFAULT ARRAY['User'],
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_unique_idx ON users (lower(username)) WHERE username IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS user_profiles (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

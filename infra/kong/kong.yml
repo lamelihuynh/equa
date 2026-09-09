@@ -51,13 +51,28 @@ services:
     routes:
       - name: ledger-routes
         paths:
-          - /v1/friends
-          - /v1/groups
           - /v1/expenses
           - /v1/balances
           - /v1/settlements
-          - /v1/sync
           - /v1/ledger
+        strip_path: false
+
+  - name: social-service
+    url: http://host.docker.internal:3005
+    routes:
+      - name: social-routes
+        paths:
+          - /v1/friends
+          - /v1/groups
+        strip_path: false
+
+  - name: automation-sync-service
+    url: http://host.docker.internal:3004
+    routes:
+      - name: automation-sync-routes
+        paths:
+          - /v1/sync
+          - /v1/recurring
         strip_path: false
 
   - name: platform-service

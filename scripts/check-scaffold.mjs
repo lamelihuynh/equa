@@ -13,6 +13,7 @@ const required = [
   'apps/mobile/package.json',
   'services/identity/package.json',
   'services/ledger/package.json',
+  'services/social/package.json',
   'services/platform/package.json',
   'workers/notification/package.json',
 ];
@@ -30,7 +31,3 @@ if (/=(?:changeme|password|secret)$/imu.test(envExample)) {
 }
 
 console.log(`Scaffold check passed (${required.length} required files).`);
-
-
-
-

@@ -2,7 +2,7 @@
 
 ## 1. Kết luận
 
-Đội 5 người nên bắt đầu với **4 deployable backend** thay vì một service cho mỗi danh từ trong SRS.
+Đội 5 người nên bắt đầu với **5 deployable backend** thay vì một service cho mỗi danh từ trong SRS.
 Ranh giới vẫn là microservice thật (API/event và dữ liệu riêng), nhưng các nghiệp vụ cần transaction
 chặt được đặt cùng một context. Khi tải hoặc đội ngũ tăng, module bên trong có thể tách ra dựa trên số
 liệu vận hành.
@@ -48,12 +48,13 @@ transaction.
 
 ## 3. Bounded context và database ownership
 
-| Deployable            | Sở hữu                                                                                               | Database            | Không được làm                                          |
-| --------------------- | ---------------------------------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------- |
-| `identity-service`    | credential/session, profile, privacy/export/delete orchestration                                     | `equa_identity`     | Không giữ group/expense                                 |
-| `ledger-service`      | friendship, group/member, expense/split, recurring, balance, debt view, settlement, sync log, outbox | `equa_ledger`       | Không gọi payment provider trực tiếp                    |
-| `platform-service`    | subscription/entitlement, payment adapter, currency/rate, receipt/OCR draft, feature flag/admin      | `equa_platform`     | Không cập nhật bảng balance/expense                     |
-| `notification-worker` | delivery attempt, template/channel status, idempotency                                               | `equa_notification` | Không chặn transaction nghiệp vụ chính khi provider lỗi |
+| Deployable            | Sở hữu                                                                                          | Database            | Không được làm                                          |
+| --------------------- | ----------------------------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------- |
+| `identity-service`    | credential/session, profile, privacy/export/delete orchestration                                | `equa_identity`     | Không giữ group/expense                                 |
+| `social-service`      | friendship requests, friendship, group/member, roles, group invitations                         | `equa_social`       | Không đọc Identity/Ledger database                      |
+| `ledger-service`      | expense/split, recurring, balance, debt view, settlement, sync log, outbox                      | `equa_ledger`       | Không gọi payment provider trực tiếp                    |
+| `platform-service`    | subscription/entitlement, payment adapter, currency/rate, receipt/OCR draft, feature flag/admin | `equa_platform`     | Không cập nhật bảng balance/expense                     |
+| `notification-worker` | delivery attempt, template/channel status, idempotency                                          | `equa_notification` | Không chặn transaction nghiệp vụ chính khi provider lỗi |
 
 `Expense + Split + Balance + Settlement` cố ý ở chung Ledger trong V1. Tách chúng thành các database
 khác nhau sẽ biến một invariant tài chính đơn giản thành distributed transaction. Khi cần scale, ưu tiên
@@ -94,7 +95,7 @@ trong private management network.
 ### Local
 
 App chạy native để hot reload; Postgres/Redis/RabbitMQ/MinIO/Mailpit/Kong chạy Compose. Một PostgreSQL
-container chứa bốn logical database để tiết kiệm RAM. Đây không phải topology production.
+container chứa năm logical database để tiết kiệm RAM. Đây không phải topology production.
 
 ### Staging/production khuyến nghị
 
