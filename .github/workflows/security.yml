@@ -12,7 +12,7 @@ permissions:
   security-events: write
 
 jobs:
-  codeql:4e160415-aa06-402a-9b28-4ecd7b4d1147
+  codeql:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
