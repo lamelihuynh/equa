@@ -19,6 +19,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          package-manager-cache: false
       - id: components
         name: Read deployable component manifest
         run: echo "matrix=$(node scripts/ci/affected-components.mjs --all --mode images)" >> "$GITHUB_OUTPUT"
