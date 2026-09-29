@@ -1,4 +1,9 @@
-import type { SyncOperation, SyncRequest, SyncResult as ContractSyncResult } from '@equa/contracts';
+import type {
+  SyncConflictResolutionRequest,
+  SyncOperation,
+  SyncRequest,
+  SyncResult as ContractSyncResult,
+} from '@equa/contracts';
 
 import { operationHash } from '../automation/automation.service.js';
 import type { SyncReservation } from '../database/postgres.repository.js';
@@ -43,6 +48,7 @@ export interface SyncReceiptStore {
     code: string,
     error: string,
   ): Promise<void>;
+  resolveSyncConflict(ownerId: string, deviceId: string, operationId: string): Promise<boolean>;
 }
 
 /** Test-only persistence substitute; production always supplies AutomationDatabase. */
@@ -159,6 +165,15 @@ export class InMemorySyncReceiptStore implements SyncReceiptStore {
     }
     return Promise.resolve();
   }
+  resolveSyncConflict(ownerId: string, deviceId: string, operationId: string): Promise<boolean> {
+    const row = this.rows.get(this.key(ownerId, deviceId, operationId));
+    if (row?.state === 'failed' && row.code === 'USER_DISCARDED') return Promise.resolve(true);
+    if (row?.state !== 'conflict') return Promise.resolve(false);
+    row.state = 'failed';
+    row.code = 'USER_DISCARDED';
+    row.token = undefined;
+    return Promise.resolve(true);
+  }
   private scope(ownerId: string, deviceId: string): string {
     return `${ownerId}\u0000${deviceId}`;
   }
@@ -184,6 +199,10 @@ export class SyncService {
   }
   async feed(ownerId: string, cursor?: string): Promise<{ cursor?: string; events: unknown[] }> {
     return this.ledger.readFeed(ownerId, cursor);
+  }
+
+  resolveConflict(ownerId: string, request: SyncConflictResolutionRequest): Promise<boolean> {
+    return this.receipts.resolveSyncConflict(ownerId, request.deviceId, request.operationId);
   }
 
   private async apply(

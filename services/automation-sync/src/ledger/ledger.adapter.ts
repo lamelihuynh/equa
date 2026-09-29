@@ -1,5 +1,7 @@
 import type { SyncOperation } from '@equa/contracts';
 
+const INTERNAL_HTTP_TIMEOUT_MS = 3_000;
+
 export type LedgerAvailability = 'available' | 'unavailable';
 
 export class LedgerUnavailableError extends Error {}
@@ -125,6 +127,7 @@ export class HttpLedgerAdapter implements LedgerAdapter {
           ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
+        signal: AbortSignal.timeout(INTERNAL_HTTP_TIMEOUT_MS),
       });
     } catch (error) {
       throw new LedgerUnavailableError(

@@ -3,6 +3,7 @@ export const AUTOMATION_CONTRACT_VERSION = 1 as const;
 
 export interface RecurringRuleInput {
   id: string;
+  /** Positive single-unit ISO date period PnD/PnW/PnM/PnY; anchored in UTC at startsAt. */
   schedule: string;
   startsAt: string;
   payload: Record<string, unknown>;
@@ -44,7 +45,13 @@ export interface ExpenseSyncPayload {
 
 export interface ExpenseEventEnvelope extends DomainEvent {
   type: 'expense.created' | 'expense.updated' | 'expense.deleted';
-  payload: Record<string, unknown> & ExpenseSyncPayload & { expenseId: string; version: number };
+  payload: Record<string, unknown> &
+    ExpenseSyncPayload & {
+      expenseId: string;
+      version: number;
+      actorId?: string;
+      addedParticipantIds?: string[];
+    };
 }
 
 export interface SyncRequest {
@@ -52,6 +59,13 @@ export interface SyncRequest {
   deviceId: string;
   operations: SyncOperation[];
   cursor?: string;
+}
+
+export interface SyncConflictResolutionRequest {
+  version: typeof AUTOMATION_CONTRACT_VERSION;
+  deviceId: string;
+  operationId: string;
+  resolution: 'discard';
 }
 
 export interface DomainEvent {
@@ -95,10 +109,24 @@ export function parseSyncRequest(value: unknown): SyncRequest | undefined {
   return value as unknown as SyncRequest;
 }
 
+export function parseSyncConflictResolution(
+  value: unknown,
+): SyncConflictResolutionRequest | undefined {
+  if (
+    !isRecord(value) ||
+    value.version !== AUTOMATION_CONTRACT_VERSION ||
+    !isNonEmptyString(value.deviceId) ||
+    !isUuid(value.operationId) ||
+    value.resolution !== 'discard'
+  )
+    return undefined;
+  return value as unknown as SyncConflictResolutionRequest;
+}
+
 function isSyncOperation(value: unknown): value is SyncOperation {
   return (
     isRecord(value) &&
-    isNonEmptyString(value.id) &&
+    isUuid(value.id) &&
     isNonEmptyString(value.entity) &&
     (value.entityId === undefined || isNonEmptyString(value.entityId)) &&
     typeof value.expectedVersion === 'number' &&
@@ -106,6 +134,13 @@ function isSyncOperation(value: unknown): value is SyncOperation {
     value.expectedVersion >= 0 &&
     isRecord(value.payload) &&
     isNonEmptyString(value.createdAt)
+  );
+}
+
+function isUuid(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
   );
 }
 

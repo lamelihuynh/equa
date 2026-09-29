@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 
+import { nextRecurringOccurrence } from '../automation/recurrence.js';
+
 export interface ClaimedExecution {
   key: string;
   ownerId: string;
@@ -28,8 +30,11 @@ export interface StoredRule {
 
 export class AutomationDatabase {
   private readonly pool: Pool;
-  constructor(connectionString: string) {
-    this.pool = new Pool({ connectionString, max: 10 });
+  constructor(connectionString: string, pool?: Pool) {
+    this.pool = pool ?? new Pool({ connectionString, max: 10 });
+  }
+  async ping(): Promise<void> {
+    await this.pool.query('SELECT 1');
   }
   async close(): Promise<void> {
     await this.pool.end();
@@ -41,6 +46,10 @@ export class AutomationDatabase {
     try {
       await client.query('BEGIN');
       const claimed: ClaimedExecution[] = [];
+      await client.query(
+        "UPDATE recurring_executions SET status = 'dead', lease_until = NULL, lease_token = NULL, last_error = COALESCE(last_error, 'Retry budget exhausted') WHERE completed_at IS NULL AND attempts >= 8 AND (status = 'pending' OR (status = 'leased' AND lease_until <= $1))",
+        [now],
+      );
       const retries = await client.query<{
         idempotency_key: string;
         owner_id: string;
@@ -61,9 +70,11 @@ export class AutomationDatabase {
         id: string;
         owner_id: string;
         next_run_at: Date;
+        schedule_anchor_at: Date;
+        schedule: string;
         payload: Record<string, unknown>;
       }>(
-        'SELECT id, owner_id, next_run_at, payload FROM recurring_rules WHERE disabled_at IS NULL AND next_run_at <= $1 FOR UPDATE SKIP LOCKED',
+        'SELECT id, owner_id, next_run_at, schedule_anchor_at, schedule, payload FROM recurring_rules WHERE disabled_at IS NULL AND next_run_at <= $1 FOR UPDATE SKIP LOCKED',
         [now],
       );
       for (const rule of rules.rows) {
@@ -77,10 +88,10 @@ export class AutomationDatabase {
           "UPDATE recurring_executions SET status = 'leased', attempts = attempts + 1, lease_until = $2, lease_token = md5(random()::text || clock_timestamp()::text) WHERE idempotency_key = $1 AND completed_at IS NULL AND attempts < 8 AND status = 'pending' RETURNING idempotency_key, lease_token",
           [key, new Date(now.valueOf() + 30_000)],
         );
-        await client.query(
-          "UPDATE recurring_rules SET next_run_at = next_run_at + INTERVAL '1 day' WHERE id = $1",
-          [rule.id],
-        );
+        await client.query('UPDATE recurring_rules SET next_run_at = $2 WHERE id = $1', [
+          rule.id,
+          nextRecurringOccurrence(rule.next_run_at, rule.schedule_anchor_at, rule.schedule),
+        ]);
         if (execution.rowCount)
           claimed.push({
             key,
@@ -111,7 +122,7 @@ export class AutomationDatabase {
     consumeAttempt = true,
   ): Promise<void> {
     await this.pool.query(
-      "UPDATE recurring_executions SET status = 'pending', lease_until = NULL, attempts = CASE WHEN $4 THEN attempts ELSE GREATEST(attempts - 1, 0) END, last_error = $3 WHERE idempotency_key = $1 AND status = 'leased' AND lease_token = $2",
+      "UPDATE recurring_executions SET status = CASE WHEN $4 AND attempts >= 8 THEN 'dead' ELSE 'pending' END, lease_until = NULL, lease_token = NULL, attempts = CASE WHEN $4 THEN attempts ELSE GREATEST(attempts - 1, 0) END, last_error = $3 WHERE idempotency_key = $1 AND status = 'leased' AND lease_token = $2",
       [key, leaseToken, error, consumeAttempt],
     );
   }
@@ -258,9 +269,21 @@ export class AutomationDatabase {
     error: string,
   ): Promise<void> {
     await this.pool.query(
-      "UPDATE sync_operations SET status = 'conflict', lease_until = NULL, last_error = $5 WHERE owner_id = $1 AND device_id = $2 AND operation_id = $3 AND status = 'leased' AND lease_token = $4",
+      "UPDATE sync_operations SET status = 'conflict', lease_until = NULL, lease_token = NULL, last_error = $5 WHERE owner_id = $1 AND device_id = $2 AND operation_id = $3 AND status = 'leased' AND lease_token = $4",
       [ownerId, deviceId, operationId, leaseToken, error],
     );
+  }
+
+  async resolveSyncConflict(
+    ownerId: string,
+    deviceId: string,
+    operationId: string,
+  ): Promise<boolean> {
+    const result = await this.pool.query(
+      "UPDATE sync_operations SET status = 'failed', lease_until = NULL, lease_token = NULL, failure_code = 'USER_DISCARDED', last_error = 'Conflict explicitly discarded by account owner' WHERE owner_id = $1 AND device_id = $2 AND operation_id = $3 AND (status = 'conflict' OR (status = 'failed' AND failure_code = 'USER_DISCARDED')) RETURNING operation_id",
+      [ownerId, deviceId, operationId],
+    );
+    return Boolean(result.rowCount);
   }
 
   async failSync(
@@ -281,7 +304,7 @@ export class AutomationDatabase {
     input: { id: string; schedule: string; startsAt: string; payload: Record<string, unknown> },
   ): Promise<StoredRule> {
     const result = await this.pool.query<StoredRule>(
-      'INSERT INTO recurring_rules (id, owner_id, schedule, next_run_at, payload) VALUES ($1, $2, $3, $4, $5) RETURNING id, owner_id AS "ownerId", schedule, next_run_at::text AS "startsAt", payload, revision, false AS disabled',
+      'INSERT INTO recurring_rules (id, owner_id, schedule, next_run_at, schedule_anchor_at, payload) VALUES ($1, $2, $3, $4, $4, $5) RETURNING id, owner_id AS "ownerId", schedule, next_run_at::text AS "startsAt", payload, revision, false AS disabled',
       [input.id, ownerId, input.schedule, input.startsAt, input.payload],
     );
     return result.rows[0]!;
@@ -300,7 +323,7 @@ export class AutomationDatabase {
     revision: number,
   ): Promise<StoredRule | undefined> {
     const result = await this.pool.query<StoredRule>(
-      'UPDATE recurring_rules SET schedule = $3, next_run_at = $4, payload = $5, revision = revision + 1 WHERE id = $1 AND owner_id = $2 AND disabled_at IS NULL AND revision = $6 RETURNING id, owner_id AS "ownerId", schedule, next_run_at::text AS "startsAt", payload, revision, false AS disabled',
+      'UPDATE recurring_rules SET schedule = $3, next_run_at = $4, schedule_anchor_at = $4, payload = $5, revision = revision + 1 WHERE id = $1 AND owner_id = $2 AND disabled_at IS NULL AND revision = $6 RETURNING id, owner_id AS "ownerId", schedule, next_run_at::text AS "startsAt", payload, revision, false AS disabled',
       [id, ownerId, input.schedule, input.startsAt, input.payload, revision],
     );
     return result.rows[0];

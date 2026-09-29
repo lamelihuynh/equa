@@ -3,6 +3,11 @@ import { createHash } from 'node:crypto';
 import type { RecurringRuleInput } from '@equa/contracts';
 
 import type { LedgerAdapter } from '../ledger/ledger.adapter.js';
+import {
+  nextRecurringOccurrence,
+  parseRecurringSchedule,
+  parseRecurringStart,
+} from './recurrence.js';
 
 export interface Rule extends RecurringRuleInput {
   ownerId: string;
@@ -31,20 +36,37 @@ export class AutomationService {
 
   create(ownerId: string, input: RecurringRuleInput): Rule {
     if (this.rules.has(input.id)) throw new Error('Recurring rule already exists.');
-    const nextRunAt = new Date(input.startsAt);
-    if (Number.isNaN(nextRunAt.valueOf()) || !isDaily(input.schedule))
-      throw new Error('Only daily ISO schedules are supported.');
-    const rule = { ...input, ownerId, nextRunAt, disabled: false, revision: 1 };
+    const nextRunAt = parseRecurringStart(input.startsAt);
+    const period = parseRecurringSchedule(input.schedule);
+    if (!nextRunAt || !period)
+      throw new Error('A timezone-aware start and ISO date period are required.');
+    nextRecurringOccurrence(nextRunAt, nextRunAt, period);
+    const rule = {
+      ...input,
+      startsAt: nextRunAt.toISOString(),
+      ownerId,
+      nextRunAt,
+      disabled: false,
+      revision: 1,
+    };
     this.rules.set(input.id, rule);
     return rule;
   }
   update(ownerId: string, id: string, input: Omit<RecurringRuleInput, 'id'>): Rule {
     const previous = this.requireOwner(ownerId, id);
     if (previous.disabled) throw new Error('Recurring rule is disabled.');
-    const nextRunAt = new Date(input.startsAt);
-    if (Number.isNaN(nextRunAt.valueOf()) || !isDaily(input.schedule))
-      throw new Error('Only daily ISO schedules are supported.');
-    const rule = { ...previous, ...input, nextRunAt, revision: previous.revision + 1 };
+    const nextRunAt = parseRecurringStart(input.startsAt);
+    const period = parseRecurringSchedule(input.schedule);
+    if (!nextRunAt || !period)
+      throw new Error('A timezone-aware start and ISO date period are required.');
+    nextRecurringOccurrence(nextRunAt, nextRunAt, period);
+    const rule = {
+      ...previous,
+      ...input,
+      startsAt: nextRunAt.toISOString(),
+      nextRunAt,
+      revision: previous.revision + 1,
+    };
     this.rules.set(id, rule);
     return rule;
   }
@@ -67,7 +89,11 @@ export class AutomationService {
           attempts: 0,
           completed: false,
         });
-      rule.nextRunAt = new Date(rule.nextRunAt.valueOf() + 86_400_000);
+      rule.nextRunAt = nextRecurringOccurrence(
+        rule.nextRunAt,
+        new Date(rule.startsAt),
+        rule.schedule,
+      );
       await this.execute(key);
     }
   }
@@ -99,9 +125,6 @@ export class AutomationService {
     if (!rule || rule.ownerId !== ownerId) throw new Error('Recurring rule not found.');
     return rule;
   }
-}
-function isDaily(schedule: string): boolean {
-  return schedule === 'P1D';
 }
 export function operationHash(value: unknown): string {
   return createHash('sha256').update(canonicalJson(value)).digest('hex');

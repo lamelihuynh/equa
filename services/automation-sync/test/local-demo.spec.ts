@@ -45,17 +45,21 @@ interface ConstructorModule {
 }
 
 interface NotificationStoreLike {
-  persistInboxAndJob(event: DomainEvent, job: object): Promise<'inserted' | 'duplicate'>;
+  persistInboxAndJobs(
+    event: DomainEvent,
+    jobs: readonly object[],
+  ): Promise<'inserted' | 'duplicate'>;
   count(): number;
 }
 
 interface NotificationProviderLike {
   enabled: boolean;
-  deliver(): Promise<void>;
+  deliver(job: { ownerId: string; deliveryId: string }, idempotencyKey: string): Promise<void>;
 }
 
 interface NotificationWorkerLike {
   ingest(event: DomainEvent, message: { ack(): void; nack(requeue: boolean): void }): Promise<void>;
+  deliverOne(): Promise<void>;
 }
 
 async function jwt(id: string, email: string): Promise<string> {
@@ -240,9 +244,13 @@ describe('local in-memory vertical demo', () => {
       ]);
 
       const store = new notificationModule.InMemoryNotificationStore!();
+      const deliveredJobs: Array<{ ownerId: string; idempotencyKey: string }> = [];
       const worker = new workerModule.NotificationWorker!(store, {
-        enabled: false,
-        deliver: () => Promise.resolve(),
+        enabled: true,
+        deliver: (job, idempotencyKey) => {
+          deliveredJobs.push({ ownerId: job.ownerId, idempotencyKey });
+          return Promise.resolve();
+        },
       });
       let acknowledgements = 0;
       for (const event of events) {
@@ -254,7 +262,19 @@ describe('local in-memory vertical demo', () => {
         });
       }
       expect(acknowledgements).toBe(3);
-      expect(store.count()).toBe(3);
+      const addedParticipantEvent = events.find(
+        (event) => event.payload.expenseId === created.json<{ id: string }>().id,
+      );
+      expect(addedParticipantEvent?.payload.addedParticipantIds).toEqual([bob]);
+      expect(store.count()).toBe(1);
+      await worker.deliverOne();
+      expect(deliveredJobs).toEqual([
+        {
+          ownerId: bob,
+          idempotencyKey: `notification:${addedParticipantEvent?.id}:${bob}`,
+        },
+      ]);
+      expect(store.count()).toBe(0);
     } finally {
       await ledgerApp.close();
       await socialApp.close();

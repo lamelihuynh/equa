@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   HttpLedgerAdapter,
@@ -26,6 +26,7 @@ describe('HttpLedgerAdapter', () => {
     expect(requests[0]?.url).toBe('http://ledger.test/internal/expenses');
     expect(requests[0]?.headers.get('x-equa-service-key')).toBe('service-secret');
     expect(requests[0]?.headers.get('idempotency-key')).toBe('recurring:rule:date');
+    expect(requests[0]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('rejects unsupported sync entities before an HTTP write', async () => {
@@ -96,5 +97,14 @@ describe('HttpLedgerAdapter', () => {
         createdAt: 'now',
       }),
     ).rejects.toBeInstanceOf(LedgerUnavailableError);
+  });
+
+  it('classifies an internal request timeout as retryable Ledger unavailability', async () => {
+    const adapter = new HttpLedgerAdapter(
+      'http://ledger.test',
+      'service-secret',
+      vi.fn<typeof fetch>().mockRejectedValue(new DOMException('timed out', 'TimeoutError')),
+    );
+    await expect(adapter.readFeed('owner')).rejects.toBeInstanceOf(LedgerUnavailableError);
   });
 });

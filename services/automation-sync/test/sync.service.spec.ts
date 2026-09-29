@@ -28,6 +28,54 @@ describe('SyncService', () => {
     );
   });
 
+  it('unblocks a predecessor only after an explicit owner discard resolution', async () => {
+    let conflict = true;
+    const adapter: LedgerAdapter = {
+      createRecurringOccurrence: () => Promise.resolve(),
+      applySync: (_owner, _device, operation) => {
+        if (operation.id === 'first' && conflict)
+          return Promise.reject(Object.assign(new Error('conflict'), { code: 'CONFLICT' }));
+        return Promise.resolve({ version: 2 });
+      },
+      readFeed: () => Promise.resolve({ events: [] }),
+    };
+    const receipts = new InMemorySyncReceiptStore();
+    const service = new SyncService(adapter, receipts);
+    const first = {
+      id: 'first',
+      entity: 'expense',
+      expectedVersion: 0,
+      payload: {},
+      createdAt: 'now',
+    };
+    const second = {
+      id: 'second',
+      entity: 'expense',
+      expectedVersion: 1,
+      payload: {},
+      createdAt: 'now',
+    };
+    await expect(
+      service.push('owner', { version: 1, deviceId: 'device', operations: [first] }),
+    ).resolves.toMatchObject([{ status: 'conflict' }]);
+    await expect(
+      service.push('owner', { version: 1, deviceId: 'device', operations: [second] }),
+    ).resolves.toMatchObject([{ status: 'failed', code: 'SYNC_BLOCKED', retryable: true }]);
+
+    const resolution = {
+      version: 1 as const,
+      deviceId: 'device',
+      operationId: 'first',
+      resolution: 'discard' as const,
+    };
+    await expect(service.resolveConflict('owner', resolution)).resolves.toBe(true);
+    await expect(service.resolveConflict('owner', resolution)).resolves.toBe(true);
+    conflict = false;
+    await expect(
+      service.push('owner', { version: 1, deviceId: 'device', operations: [second] }),
+    ).resolves.toMatchObject([{ status: 'applied', version: 2 }]);
+  });
+
   it('does not let concurrent successor reservations bypass an unresolved predecessor', async () => {
     const receipts = new InMemorySyncReceiptStore();
     const first = await receipts.reserveSync('owner', 'device', 'first', 'first-hash', {});

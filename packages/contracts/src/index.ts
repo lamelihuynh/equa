@@ -1,4 +1,11 @@
-export const SERVICE_NAMES = ['identity', 'ledger', 'platform', 'notification'] as const;
+export const SERVICE_NAMES = [
+  'identity',
+  'social',
+  'ledger',
+  'automation-sync',
+  'platform',
+  'notification',
+] as const;
 
 export type ServiceName = (typeof SERVICE_NAMES)[number];
 
