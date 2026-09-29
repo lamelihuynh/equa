@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@equa/contracts": "workspace:*",
+    "@fastify/rate-limit": "11.2.0",
     "@nestjs/common": "11.1.29",
     "@nestjs/core": "11.1.29",
     "@nestjs/platform-fastify": "11.1.29",

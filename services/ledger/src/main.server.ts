@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import { jwtVerify } from 'jose';
 
 import { LedgerDatabase } from './database/postgres.repository.js';
@@ -25,6 +26,7 @@ export interface LedgerServerOptions {
   serviceKey?: string;
   automationServiceKey?: string;
   socialServiceKey?: string;
+  rateLimitMax?: number;
 }
 
 export async function buildLedgerServer(
@@ -87,7 +89,13 @@ export async function buildLedgerServer(
       await reply.code(401).send({ code: 'UNAUTHORIZED', message: 'Invalid access token.' });
     }
   });
-  app.get('/health', () => ({
+  await app.register(rateLimit, {
+    max: options.rateLimitMax ?? 120,
+    timeWindow: '1 minute',
+    hook: 'preHandler',
+    keyGenerator: (request) => (request.user ? `user:${request.user.id}` : `ip:${request.ip}`),
+  });
+  app.get('/health', { config: { rateLimit: false } }, () => ({
     status: 'ok',
     service: 'ledger',
     timestamp: new Date().toISOString(),

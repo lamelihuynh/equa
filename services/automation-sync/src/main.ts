@@ -5,6 +5,7 @@ import type { IncomingMessage } from 'node:http';
 import { join } from 'node:path';
 import { config as loadEnv } from 'dotenv';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import { jwtVerify } from 'jose';
 
 import { parseSyncConflictResolution, parseSyncRequest } from '@equa/contracts';
@@ -60,6 +61,7 @@ export async function buildServer(
   db: AutomationDatabase | undefined = database,
   syncService: SyncService | undefined = sync,
   ledgerAdapter: LedgerAdapter = ledger,
+  options: { rateLimitMax?: number } = {},
 ): Promise<FastifyInstance> {
   if (!secret) throw new Error('IDENTITY_JWT_SECRET must be configured.');
   const app = Fastify({
@@ -103,13 +105,22 @@ export async function buildServer(
       return reply.code(401).send({ message: 'Invalid access token.' });
     }
   });
+  await app.register(rateLimit, {
+    max: options.rateLimitMax ?? 120,
+    timeWindow: '1 minute',
+    hook: 'preHandler',
+    keyGenerator: (request) => {
+      const owner = request.headers['x-equa-owner'];
+      return typeof owner === 'string' ? `owner:${owner}` : `ip:${request.ip}`;
+    },
+  });
 
-  app.get('/health', () => ({
+  app.get('/health', { config: { rateLimit: false } }, () => ({
     status: 'ok',
     service: 'automation-sync',
     timestamp: new Date().toISOString(),
   }));
-  app.get('/ready', async (_request, reply) => {
+  app.get('/ready', { config: { rateLimit: false } }, async (_request, reply) => {
     let databaseReady = false;
     if (db) {
       try {
