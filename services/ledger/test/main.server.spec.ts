@@ -31,6 +31,13 @@ describe('Ledger HTTP boundary', () => {
       social,
       serviceKey: 'service-secret',
     });
+    const correlationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const health = await app.inject({
+      method: 'GET',
+      url: '/health',
+      headers: { 'x-correlation-id': correlationId },
+    });
+    expect(health.headers['x-correlation-id']).toBe(correlationId);
     const authorization = `Bearer ${await token('secret', ownerId, 'alice@example.test')}`;
     const result = await app.inject({
       method: 'POST',
@@ -44,8 +51,19 @@ describe('Ledger HTTP boundary', () => {
       },
     });
     expect(result.statusCode).toBe(201);
-    const resultBody = JSON.parse(result.body) as { amountMinor: string };
+    const resultBody = JSON.parse(result.body) as { id: string; amountMinor: string };
     expect(resultBody.amountMinor).toBe('9007199254740992');
+    const listed = await app.inject({
+      method: 'GET',
+      url: '/v1/expenses',
+      headers: { authorization },
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json<Array<{ id: string }>>().map((expense) => expense.id)).toEqual([
+      resultBody.id,
+    ]);
+    const unauthenticatedList = await app.inject({ method: 'GET', url: '/v1/expenses' });
+    expect(unauthenticatedList.statusCode).toBe(401);
     const denied = await app.inject({
       method: 'POST',
       url: '/internal/balances/debt',

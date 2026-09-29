@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import type { IncomingMessage } from 'node:http';
+
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { jwtVerify } from 'jose';
 
@@ -40,7 +43,32 @@ export async function buildLedgerServer(
       ? new HttpLedgerSocialAdapter(process.env.SOCIAL_URL, process.env.LEDGER_SERVICE_KEY)
       : new FailClosedSocialAdapter());
   const service = new ExpenseService(repository, social);
-  const app = Fastify();
+  const app = Fastify({
+    logger: {
+      level: process.env.LOG_LEVEL ?? (process.env.NODE_ENV === 'test' ? 'silent' : 'info'),
+      base: { service: 'ledger' },
+      redact: {
+        paths: [
+          'req.headers.authorization',
+          'req.headers.cookie',
+          'req.headers["x-equa-service-key"]',
+        ],
+        censor: '[REDACTED]',
+      },
+      serializers: {
+        req: (request) => ({
+          method: request.method,
+          route: request.routeOptions.url ?? request.url.split('?')[0],
+        }),
+      },
+    },
+    genReqId: correlationIdFor,
+    requestIdLogLabel: 'correlationId',
+  });
+  app.addHook('onSend', async (request, reply, payload) => {
+    reply.header('x-correlation-id', request.id);
+    return payload;
+  });
   app.addHook('preHandler', async (request, reply) => {
     if (request.url === '/health' || request.url.startsWith('/internal/')) return;
     const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
@@ -79,6 +107,11 @@ export async function buildLedgerServer(
           ),
         );
     }),
+  );
+  app.get('/v1/expenses', async (request, reply) =>
+    handle(reply, async () =>
+      reply.send(await service.list(ledgerUser(request), filters(request.query))),
+    ),
   );
   app.get('/v1/expenses/total', async (request, reply) =>
     handle(reply, async () =>
@@ -277,6 +310,10 @@ function ledgerUser(request: FastifyRequest): AuthenticatedLedgerUser {
   const current = request.user;
   if (!current) throw new LedgerError('UNAUTHORIZED', 'Authentication is required.', 401);
   return current;
+}
+function correlationIdFor(request: IncomingMessage): string {
+  const candidate = request.headers['x-correlation-id'];
+  return typeof candidate === 'string' && isUuid(candidate) ? candidate : randomUUID();
 }
 function params(request: FastifyRequest): { id: string } {
   return request.params as { id: string };

@@ -4,6 +4,8 @@ export interface LedgerSocialAdapter {
   isFriend(userA: string, userB: string): Promise<boolean>;
 }
 
+const INTERNAL_HTTP_TIMEOUT_MS = 3_000;
+
 export class FailClosedSocialAdapter implements LedgerSocialAdapter {
   private unavailable(): Error {
     return new Error('Social membership service is unavailable.');
@@ -44,6 +46,7 @@ export class HttpLedgerSocialAdapter implements LedgerSocialAdapter {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-equa-service-key': this.serviceKey },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(INTERNAL_HTTP_TIMEOUT_MS),
       });
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Social request failed.', {

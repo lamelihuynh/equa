@@ -1,13 +1,15 @@
 import 'reflect-metadata';
 
 import { config as loadEnv } from 'dotenv';
+import { join } from 'node:path';
 
 import { LedgerDatabase } from './database/postgres.repository.js';
 import { buildLedgerServer } from './main.server.js';
 import { LedgerOutboxPublisher } from './outbox.publisher.js';
 import { AmqpLedgerEventPublisher } from './rabbit.publisher.js';
 
-loadEnv();
+if (process.env.NODE_ENV !== 'test')
+  loadEnv({ path: join(process.cwd(), '../../.env'), quiet: true });
 
 async function bootstrap(): Promise<void> {
   if (!process.env.IDENTITY_JWT_SECRET) return;

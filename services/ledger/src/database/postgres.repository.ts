@@ -210,7 +210,7 @@ export class LedgerDatabase implements ExpenseRepository {
 
   async persistMutation(mutation: ExpenseMutation): Promise<MutationResult> {
     const client = await this.pool.connect();
-    const lockKey = `${mutation.scope}\u0000${mutation.key}`;
+    const lockKey = postgresIdempotencyLockKey(mutation.scope, mutation.key);
     try {
       await client.query('BEGIN');
       // Serialize retries across service instances before checking and writing
@@ -507,6 +507,11 @@ export class LedgerDatabase implements ExpenseRepository {
         [expenseId, participant.userId, participant.shareMinor],
       );
   }
+}
+
+/** Text-safe, unambiguous key for the transaction advisory lock. */
+export function postgresIdempotencyLockKey(scope: string, key: string): string {
+  return JSON.stringify([scope, key]);
 }
 function toExpense(row: ExpenseRow, participants: ParticipantRow[]): Expense {
   return {

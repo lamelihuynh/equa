@@ -94,5 +94,9 @@ export interface LedgerOutboxEvent {
   ownerId: string;
   correlationId: string;
   producer: 'ledger';
-  payload: Record<string, unknown> & { expenseId: string; version: number };
+  payload: Record<string, unknown> & {
+    expenseId: string;
+    version: number;
+    addedParticipantIds?: string[];
+  };
 }

@@ -133,7 +133,13 @@ export class ExpenseService {
       scope: actor.id,
       key,
       hash: requestHash,
-      event: this.eventFor('create', expense, actor.id, key),
+      event: this.eventFor(
+        'create',
+        expense,
+        actor.id,
+        key,
+        expense.participants.map((participant) => participant.userId),
+      ),
     });
     if (duplicate) return duplicate;
     this.recalculate(expense);
@@ -175,6 +181,9 @@ export class ExpenseService {
       throw new LedgerError('EXPENSE_DELETED', 'Deleted expenses cannot be updated.', 409);
     assertExpectedVersion(input.expectedVersion, expense.version);
     const previousVersion = expense.version;
+    const previousParticipantIds = new Set(
+      expense.participants.map((participant) => participant.userId),
+    );
     if (input.amountMinor !== undefined) {
       const amountMinor = parseMinor(input.amountMinor, 'amountMinor');
       expense.amountMinor = amountMinor.toString();
@@ -225,7 +234,15 @@ export class ExpenseService {
       key,
       hash: requestHash,
       expectedVersion: previousVersion,
-      event: this.eventFor('update', expense, actor.id, key),
+      event: this.eventFor(
+        'update',
+        expense,
+        actor.id,
+        key,
+        expense.participants
+          .map((participant) => participant.userId)
+          .filter((userId) => !previousParticipantIds.has(userId)),
+      ),
     });
     if (duplicate) return duplicate;
     this.recalculate(expense);
@@ -305,6 +322,30 @@ export class ExpenseService {
     const expense = await this.require(id);
     await this.authorizeAccess(actor.id, expense);
     return this.repository.listHistory(id);
+  }
+
+  async list(actor: AuthenticatedLedgerUser, filters: ExpenseFilters): Promise<Expense[]> {
+    validateFilters(filters);
+    if (filters.userId && filters.userId !== actor.id)
+      throw new LedgerError(
+        'EXPENSE_LIST_FORBIDDEN',
+        'Expenses may only be listed for the authenticated user.',
+        403,
+      );
+    if (filters.friendId && !(await this.safeFriend(actor.id, filters.friendId)))
+      throw new LedgerError('FRIEND_FORBIDDEN', 'Friend access is unavailable.', 403);
+    if (filters.groupId && !(await this.safeMember(filters.groupId, actor.id)))
+      throw new LedgerError('GROUP_FORBIDDEN', 'Group membership is required.', 403);
+
+    const visible: Expense[] = [];
+    for (const expense of await this.repository.listExpenses()) {
+      if (expense.state === 'DELETED' || !this.matches(expense, filters)) continue;
+      if (await this.canRead(actor.id, expense)) visible.push(structuredClone(expense));
+    }
+    return visible.sort(
+      (left, right) =>
+        right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id),
+    );
   }
 
   async total(actor: AuthenticatedLedgerUser, filters: ExpenseFilters): Promise<ExpenseTotal> {
@@ -580,6 +621,7 @@ export class ExpenseService {
   private matches(expense: Expense, filters: ExpenseFilters): boolean {
     return (
       (!filters.userId ||
+        expense.ownerId === filters.userId ||
         expense.payerId === filters.userId ||
         expense.participants.some((item) => item.userId === filters.userId)) &&
       (!filters.friendId || expense.friendId === filters.friendId) &&
@@ -614,6 +656,7 @@ export class ExpenseService {
     expense: Expense,
     actorId: string,
     idempotencyKey: string,
+    addedParticipantIds: string[] = [],
   ): LedgerOutboxEvent {
     return {
       id: randomUUID(),
@@ -628,6 +671,9 @@ export class ExpenseService {
         version: expense.version,
         ownerId: expense.ownerId,
         actorId,
+        addedParticipantIds: [
+          ...new Set(addedParticipantIds.filter((userId) => userId !== actorId)),
+        ],
         amountMinor: expense.amountMinor,
         currency: expense.currency,
         description: expense.description,

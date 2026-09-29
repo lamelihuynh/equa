@@ -14,7 +14,8 @@ const social: LedgerSocialAdapter = {
 
 describe('ExpenseService', () => {
   it('creates integer-safe expenses and replays a payload-bound idempotency key', async () => {
-    const service = new ExpenseService(new InMemoryExpenseRepository(), social);
+    const repository = new InMemoryExpenseRepository();
+    const service = new ExpenseService(repository, social);
     const input = {
       amountMinor: '300',
       currency: 'VND',
@@ -28,6 +29,7 @@ describe('ExpenseService', () => {
     };
     const first = await service.create(alice, input, 'create-1');
     expect(first.state).toBe('ACTIVE');
+    expect(repository.outbox[0]?.payload.addedParticipantIds).toEqual([bob.id]);
     expect((await service.create(alice, input, 'create-1')).id).toBe(first.id);
     await expect(
       service.create(alice, { ...input, amountMinor: '301' }, 'create-1'),
@@ -70,17 +72,24 @@ describe('ExpenseService', () => {
         currency: 'USD',
         payerId: alice.id,
         participants: [{ userId: bob.id, shareMinor: '1000' }],
-        friendId: bob.id,
+        groupId: 'group-1',
       },
       'create',
     );
     const updated = await service.update(
       bob,
       expense.id,
-      { amountMinor: '1200', participants: [{ userId: bob.id, shareMinor: '1200' }] },
+      {
+        amountMinor: '1200',
+        participants: [
+          { userId: bob.id, shareMinor: '600' },
+          { userId: 'charlie', shareMinor: '600' },
+        ],
+      },
       'update',
     );
     expect(updated.state).toBe('UPDATED');
+    expect(repository.outbox[1]?.payload.addedParticipantIds).toEqual(['charlie']);
     expect(service.recalculationCount(expense.id)).toBe(2);
     const deleted = await service.remove(alice, expense.id, 'delete');
     expect(deleted.state).toBe('DELETED');
@@ -268,6 +277,69 @@ describe('ExpenseService', () => {
     });
     await expect(service.total(bob, { userId: alice.id })).rejects.toMatchObject({
       code: 'TOTAL_FORBIDDEN',
+    });
+  });
+
+  it('lists only caller-visible active expenses and counts expenses owned by the caller', async () => {
+    const repository = new InMemoryExpenseRepository();
+    const service = new ExpenseService(repository, {
+      isGroupMember: () => Promise.resolve(false),
+      isGroupAdmin: () => Promise.resolve(false),
+      isFriend: (userId, friendId) => Promise.resolve(userId === alice.id && friendId === bob.id),
+    });
+    const ownedWithOtherPayer = await service.create(
+      alice,
+      {
+        amountMinor: '10',
+        currency: 'USD',
+        payerId: bob.id,
+        friendId: bob.id,
+        participants: [{ userId: bob.id, shareMinor: '10' }],
+      },
+      'owned-other-payer',
+    );
+    const ownExpense = await service.create(
+      alice,
+      {
+        amountMinor: '15',
+        currency: 'USD',
+        payerId: alice.id,
+        participants: [{ userId: alice.id, shareMinor: '15' }],
+      },
+      'owned-self-payer',
+    );
+    await service.create(
+      bob,
+      {
+        amountMinor: '20',
+        currency: 'USD',
+        payerId: bob.id,
+        participants: [{ userId: bob.id, shareMinor: '20' }],
+      },
+      'not-visible-to-alice',
+    );
+    const deleted = await service.create(
+      alice,
+      {
+        amountMinor: '25',
+        currency: 'USD',
+        payerId: alice.id,
+        participants: [{ userId: alice.id, shareMinor: '25' }],
+      },
+      'deleted-expense',
+    );
+    await service.remove(alice, deleted.id, 'delete-expense');
+
+    const listed = await service.list(alice, {});
+    expect(listed.map((expense) => expense.id).sort()).toEqual(
+      [ownedWithOtherPayer.id, ownExpense.id].sort(),
+    );
+    await expect(service.total(alice, { userId: alice.id })).resolves.toMatchObject({
+      totalMinor: '25',
+      count: 2,
+    });
+    await expect(service.list(bob, { userId: alice.id })).rejects.toMatchObject({
+      code: 'EXPENSE_LIST_FORBIDDEN',
     });
   });
 });
