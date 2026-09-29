@@ -62,23 +62,48 @@ export default function ResetPasswordPage() {
         <p className="kicker">BẢO MẬT TÀI KHOẢN</p>
         <h1>{completed ? 'Mật khẩu mới đã sẵn sàng.' : 'Đặt lại mật khẩu'}</h1>
         {!completed && !invalidLink ? (
-          <form className="formStack" onSubmit={(event) => { void submit(event); }}>
+          <form
+            className="formStack"
+            onSubmit={(event) => {
+              void submit(event);
+            }}
+          >
             <label>
               Mật khẩu mới
-              <input name="password" type="password" autoComplete="new-password" minLength={8} required placeholder="Tối thiểu 8 ký tự" />
+              <input
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+                placeholder="Tối thiểu 8 ký tự"
+              />
             </label>
             <label>
               Nhập lại mật khẩu mới
-              <input name="confirmation" type="password" autoComplete="new-password" minLength={8} required placeholder="Nhập lại mật khẩu" />
+              <input
+                name="confirmation"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+                placeholder="Nhập lại mật khẩu"
+              />
             </label>
             <button className="primaryBtn" disabled={loading}>
               {loading ? 'Đang đặt lại…' : 'Lưu mật khẩu mới'}
             </button>
           </form>
         ) : null}
-        {message ? <p className={`authActionMessage ${completed ? 'success' : 'error'}`}>{message}</p> : null}
-        {(completed || invalidLink) ? (
-          <button className="textAction authActionLink" type="button" onClick={() => router.replace('/')}>
+        {message ? (
+          <p className={`authActionMessage ${completed ? 'success' : 'error'}`}>{message}</p>
+        ) : null}
+        {completed || invalidLink ? (
+          <button
+            className="textAction authActionLink"
+            type="button"
+            onClick={() => router.replace('/')}
+          >
             Quay về trang đăng nhập
           </button>
         ) : null}

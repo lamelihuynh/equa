@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/v1';
+import { apiJson, isLocalDemoSession } from '../api-client';
+
 const avatarOrigin = process.env.NEXT_PUBLIC_AVATAR_ORIGIN ?? 'http://localhost:9000';
 
 const currencies = [
@@ -48,24 +49,14 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  function authHeaders() {
-    return {
-      Authorization: `Bearer ${sessionStorage.getItem('equa_access_token') ?? ''}`,
-      'X-Correlation-ID': crypto.randomUUID(),
-    };
-  }
-
-  function handleUnauthorized(response: Response) {
-    if (response.status !== 401) return false;
-    sessionStorage.removeItem('equa_access_token');
-    router.replace('/');
-    return true;
-  }
+  useEffect(() => {
+    const expire = (): void => router.replace('/?expired=1');
+    window.addEventListener('equa-session-expired', expire);
+    return () => window.removeEventListener('equa-session-expired', expire);
+  }, [router]);
 
   async function loadAvatarUrl(): Promise<string | null> {
-    const response = await fetch(`${apiBaseUrl}/profile/me/avatar-url`, { headers: authHeaders() });
-    if (handleUnauthorized(response)) return null;
-    return trustedAvatarUrl(await response.json());
+    return trustedAvatarUrl(await apiJson('profile/me/avatar-url'));
   }
 
   useEffect(() => {
@@ -74,11 +65,14 @@ export default function ProfilePage() {
         router.replace('/');
         return;
       }
+      if (isLocalDemoSession()) {
+        setMessage('Hồ sơ Identity không được lưu trong Local Demo.');
+        setLoading(false);
+        return;
+      }
       try {
-        const response = await fetch(`${apiBaseUrl}/profile/me`, { headers: authHeaders() });
-        if (handleUnauthorized(response)) return;
-        const result: unknown = await response.json();
-        if (!response.ok || !isProfile(result)) throw new Error('Không thể tải hồ sơ.');
+        const result = await apiJson('profile/me');
+        if (!isProfile(result)) throw new Error('Không thể tải hồ sơ.');
         setProfile(result);
         if (result.avatarKey) setAvatarUrl(await loadAvatarUrl());
       } catch (error) {
@@ -96,9 +90,8 @@ export default function ProfilePage() {
     setSaving(true);
     setMessage('');
     try {
-      const response = await fetch(`${apiBaseUrl}/profile/me`, {
+      const result = await apiJson('profile/me', {
         method: 'PATCH',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({
           displayName: data.get('displayName'),
           defaultCurrency: data.get('defaultCurrency'),
@@ -107,9 +100,7 @@ export default function ProfilePage() {
           bio: data.get('bio'),
         }),
       });
-      if (handleUnauthorized(response)) return;
-      const result: unknown = await response.json();
-      if (!response.ok || !isProfile(result)) throw new Error(readMessage(result) ?? 'Không thể lưu hồ sơ.');
+      if (!isProfile(result)) throw new Error(readMessage(result) ?? 'Không thể lưu hồ sơ.');
       setProfile(result);
       setMessage('Đã lưu thay đổi hồ sơ.');
     } catch (error) {
@@ -122,7 +113,10 @@ export default function ProfilePage() {
   async function uploadAvatar(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+    if (
+      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+      file.size > 2 * 1024 * 1024
+    ) {
       setMessage('Avatar phải là JPEG, PNG hoặc WebP, tối đa 2 MB.');
       return;
     }
@@ -131,14 +125,11 @@ export default function ProfilePage() {
     try {
       const body = new FormData();
       body.append('file', file);
-      const response = await fetch(`${apiBaseUrl}/profile/me/avatar`, {
+      const result = await apiJson('profile/me/avatar', {
         method: 'POST',
-        headers: authHeaders(),
         body,
       });
-      if (handleUnauthorized(response)) return;
-      const result: unknown = await response.json();
-      if (!response.ok || !isProfile(result)) throw new Error(readMessage(result) ?? 'Không thể tải avatar.');
+      if (!isProfile(result)) throw new Error(readMessage(result) ?? 'Không thể tải avatar.');
       setProfile(result);
       setAvatarUrl(await loadAvatarUrl());
       setMessage('Đã tải avatar lên MinIO.');
@@ -162,37 +153,117 @@ export default function ProfilePage() {
   return (
     <main className="profilePage">
       <header className="profileHeader">
-        <button className="backButton" onClick={() => router.push('/dashboard')}>← Tổng quan</button>
-        <div className="sidebarBrand"><span className="equaMark smallMark">=</span><b>equa</b></div>
+        <button className="backButton" onClick={() => router.push('/dashboard')}>
+          ← Tổng quan
+        </button>
+        <div className="sidebarBrand">
+          <span className="equaMark smallMark">=</span>
+          <b>equa</b>
+        </div>
       </header>
       <section className="profileHero">
         <p className="kicker">HỒ SƠ & TUỲ CHỌN</p>
         <h1>Thiết lập Equa theo cách của bạn.</h1>
-        <p>Thông tin này thuộc Identity service và được lưu riêng với dữ liệu chi tiêu của Ledger.</p>
+        <p>
+          Thông tin này thuộc Identity service và được lưu riêng với dữ liệu chi tiêu của Ledger.
+        </p>
       </section>
       <section className="profileCard">
         <div className="avatarArea">
-          <button className="profileAvatar" type="button" onClick={() => fileInput.current?.click()} aria-label="Đổi ảnh đại diện">
+          <button
+            className="profileAvatar"
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            aria-label="Đổi ảnh đại diện"
+          >
             {avatarUrl ? <img src={avatarUrl} alt="Avatar của bạn" /> : initials}
             <span>Thay ảnh</span>
           </button>
-          <input ref={fileInput} className="visuallyHidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { void uploadAvatar(event); }} />
-          <div><h2>{profile.displayName}</h2><p>{profile.email}</p><small>{profile.avatarKey ? 'Avatar đã lưu trong MinIO.' : 'JPEG, PNG hoặc WebP · tối đa 2 MB'}</small></div>
+          <input
+            ref={fileInput}
+            className="visuallyHidden"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(event) => {
+              void uploadAvatar(event);
+            }}
+          />
+          <div>
+            <h2>{profile.displayName}</h2>
+            <p>{profile.email}</p>
+            <small>
+              {profile.avatarKey
+                ? 'Avatar đã lưu trong MinIO.'
+                : 'JPEG, PNG hoặc WebP · tối đa 2 MB'}
+            </small>
+          </div>
         </div>
-        <form className="profileForm" onSubmit={(event) => { void save(event); }}>
-          <label>Tên hiển thị<input name="displayName" defaultValue={profile.displayName} required maxLength={100} /></label>
-          <label>Email<input value={profile.email} disabled /></label>
-          <label className="fullWidth">Giới thiệu<textarea name="bio" defaultValue={profile.bio} placeholder="Một chút về bạn..." maxLength={500} /></label>
-          <label>Tiền tệ mặc định<select name="defaultCurrency" defaultValue={profile.defaultCurrency}>
-            {currencies.map((c) => (<option key={c.value} value={c.value}>{c.label}</option>))}
-          </select></label>
-          <label>Ngôn ngữ<select name="locale" defaultValue={profile.locale}><option value="vi">Tiếng Việt</option><option value="en">English</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="es">Español</option><option value="pt">Português</option><option value="ja">日本語</option></select></label>
-          <label className="fullWidth">Múi giờ<select name="timezone" defaultValue={profile.timezone}>
-            {timezones.map((tz) => (<option key={tz.value} value={tz.value}>{tz.label}</option>))}
-          </select></label>
-          <div className="profileActions"><button className="primaryBtn" disabled={saving}>{saving ? 'Đang lưu…' : 'Lưu thay đổi'}</button></div>
+        <form
+          className="profileForm"
+          onSubmit={(event) => {
+            void save(event);
+          }}
+        >
+          <label>
+            Tên hiển thị
+            <input name="displayName" defaultValue={profile.displayName} required maxLength={100} />
+          </label>
+          <label>
+            Email
+            <input value={profile.email} disabled />
+          </label>
+          <label className="fullWidth">
+            Giới thiệu
+            <textarea
+              name="bio"
+              defaultValue={profile.bio}
+              placeholder="Một chút về bạn..."
+              maxLength={500}
+            />
+          </label>
+          <label>
+            Tiền tệ mặc định
+            <select name="defaultCurrency" defaultValue={profile.defaultCurrency}>
+              {currencies.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Ngôn ngữ
+            <select name="locale" defaultValue={profile.locale}>
+              <option value="vi">Tiếng Việt</option>
+              <option value="en">English</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="es">Español</option>
+              <option value="pt">Português</option>
+              <option value="ja">日本語</option>
+            </select>
+          </label>
+          <label className="fullWidth">
+            Múi giờ
+            <select name="timezone" defaultValue={profile.timezone}>
+              {timezones.map((tz) => (
+                <option key={tz.value} value={tz.value}>
+                  {tz.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="profileActions">
+            <button className="primaryBtn" disabled={saving}>
+              {saving ? 'Đang lưu…' : 'Lưu thay đổi'}
+            </button>
+          </div>
         </form>
-        {message && <p className="formMessage" role="status">{message}</p>}
+        {message && (
+          <p className="formMessage" role="status">
+            {message}
+          </p>
+        )}
       </section>
     </main>
   );
@@ -203,15 +274,27 @@ function isProfile(value: unknown): value is Profile {
 }
 
 function readMessage(value: unknown): string | undefined {
-  return typeof value === 'object' && value !== null && 'message' in value && typeof value.message === 'string' ? value.message : undefined;
+  return typeof value === 'object' &&
+    value !== null &&
+    'message' in value &&
+    typeof value.message === 'string'
+    ? value.message
+    : undefined;
 }
 
 function trustedAvatarUrl(value: unknown): string | null {
-  if (typeof value !== 'object' || value === null || !('url' in value) || typeof value.url !== 'string') return null;
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('url' in value) ||
+    typeof value.url !== 'string'
+  )
+    return null;
   try {
     const candidate = new URL(value.url);
     const allowed = new URL(avatarOrigin);
-    if (candidate.origin !== allowed.origin || !candidate.pathname.startsWith('/equa-avatars/')) return null;
+    if (candidate.origin !== allowed.origin || !candidate.pathname.startsWith('/equa-avatars/'))
+      return null;
     return candidate.toString();
   } catch {
     return null;

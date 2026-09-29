@@ -4,7 +4,14 @@ import { SERVICE_NAMES, SUPPORTED_CURRENCIES, SUPPORTED_LANGUAGES } from './inde
 
 describe('service contracts', () => {
   it('keeps all initial deployables visible', () => {
-    expect(SERVICE_NAMES).toEqual(['identity', 'ledger', 'platform', 'notification']);
+    expect(SERVICE_NAMES).toEqual([
+      'identity',
+      'social',
+      'ledger',
+      'automation-sync',
+      'platform',
+      'notification',
+    ]);
   });
 
   it('defines profile preference choices', () => {

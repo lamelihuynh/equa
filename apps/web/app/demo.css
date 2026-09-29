@@ -1,0 +1,365 @@
+.demoBrandButton {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.demoModeBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #b8d4c8;
+  border-radius: 999px;
+  background: #e5f1eb;
+  color: #245a47;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.demoContent {
+  padding-bottom: 72px;
+}
+.demoGrid {
+  display: grid;
+  gap: 20px;
+}
+.twoColumns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.demoToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 0 0 20px;
+}
+.demoToolbar > div {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.demoToolbar p {
+  margin: 0;
+  color: #776a60;
+}
+.demoToolbar .primaryBtn {
+  padding: 0 18px;
+}
+.demoFormCard {
+  padding: 24px;
+}
+.compactForm {
+  gap: 13px;
+}
+.compactForm .primaryBtn,
+.demoInlineForm .primaryBtn {
+  min-height: 46px;
+}
+.demoInlineForm {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr auto;
+  align-items: end;
+  gap: 14px;
+}
+.demoInlineForm label,
+.demoExpenseForm label,
+.filterLabel {
+  display: grid;
+  gap: 7px;
+  color: #49382f;
+  font-size: 13px;
+  font-weight: 780;
+}
+.demoInlineForm input,
+.demoInlineForm select,
+.demoExpenseForm input,
+.demoExpenseForm select,
+.filterLabel select {
+  height: 46px;
+  border: 1px solid #d9c6b2;
+  border-radius: 13px;
+  background: #fffdfa;
+  padding: 0 13px;
+  color: #241917;
+  font: inherit;
+}
+.demoInlineForm input:focus,
+.demoInlineForm select:focus,
+.demoExpenseForm input:focus,
+.demoExpenseForm select:focus,
+.filterLabel select:focus {
+  outline: none;
+  border-color: #2a7761;
+  box-shadow: 0 0 0 3px rgba(42, 119, 97, 0.12);
+}
+.demoFeedback {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid #b8d4c8;
+  border-radius: 13px;
+  background: #e5f1eb;
+  color: #245a47;
+  font-size: 14px;
+}
+.demoSection {
+  margin-top: 20px;
+}
+.demoList {
+  display: grid;
+}
+.demoRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 76px;
+  padding: 14px 0;
+  border-top: 1px solid #eee0d2;
+}
+.demoRow b {
+  display: block;
+  font-size: 15px;
+}
+.demoRow p {
+  margin: 4px 0 8px;
+  color: #85766b;
+  font-size: 12px;
+}
+.rowActions {
+  display: flex;
+  gap: 8px;
+}
+.smallAction,
+.dangerButton {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #d9c6b2;
+  border-radius: 11px;
+  background: #fffdfa;
+  color: #4a392e;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.primarySmall {
+  border-color: #2a7761;
+  background: #2a7761;
+  color: #fff;
+}
+.dangerButton {
+  width: 100%;
+  margin-top: 18px;
+  border-color: #d99e90;
+  background: #fff3ef;
+  color: #934332;
+}
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+.statusPill.pending {
+  background: #f4e3cf;
+  color: #805e35;
+}
+.statusPill.friend {
+  background: #e5f1eb;
+  color: #245a47;
+}
+.statusPill.deleted {
+  background: #eee0d2;
+  color: #796d63;
+}
+.emptyState {
+  margin: 18px 0;
+  color: #85766b;
+  font-size: 14px;
+}
+.demoCardGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.demoGroupCard {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 280px;
+}
+.demoGroupCard h2 {
+  margin: 0;
+  font-family: Georgia, ui-serif, serif;
+  font-size: 25px;
+  letter-spacing: -0.04em;
+}
+.demoGroupCard p {
+  margin: 0 0 5px;
+  color: #776a60;
+  font-size: 13px;
+}
+.demoGroupCard .outlineButton {
+  margin-top: auto;
+}
+.largeAvatar {
+  width: 52px;
+  height: 52px;
+  font-size: 13px;
+}
+.isDeleted {
+  opacity: 0.65;
+}
+.expenseRow {
+  align-items: flex-start;
+}
+.expenseValue {
+  display: grid;
+  justify-items: end;
+  gap: 9px;
+  text-align: right;
+}
+.expenseValue strong {
+  font-size: 15px;
+}
+.demoExpenseForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+  margin-top: 8px;
+}
+.demoExpenseForm .primaryBtn {
+  grid-column: 1 / -1;
+  min-height: 48px;
+}
+
+.localDemoEntry {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px dashed #bb9d83;
+  border-radius: 15px;
+  background: #fffaf3;
+}
+.localDemoEntry p,
+.formHint {
+  margin: 0 0 10px;
+  color: #776a60;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.localDemoEntry .outlineButton {
+  width: auto;
+  padding: 0 16px;
+}
+.participantShares {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #e0cdb9;
+  border-radius: 14px;
+}
+.participantShares legend {
+  padding: 0 6px;
+  color: #49382f;
+  font-size: 13px;
+  font-weight: 780;
+}
+.participantShareRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 0.7fr);
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+}
+.participantCheck {
+  display: flex !important;
+  align-items: center;
+  gap: 9px !important;
+  min-width: 0;
+  color: #49382f;
+  font-size: 12px;
+  font-weight: 600 !important;
+}
+.participantCheck input {
+  width: 17px;
+  height: 17px;
+  accent-color: #2a7761;
+}
+.formHint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+button.groupRow {
+  width: 100%;
+  padding: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.modalLike {
+  margin-top: 20px;
+  border-color: #cbb092;
+  box-shadow: 0 14px 40px rgba(54, 35, 24, 0.08);
+}
+.filterLabel {
+  font-size: 12px;
+}
+.compactBalance {
+  min-height: 190px;
+  margin-bottom: 20px;
+}
+.compactBalance strong {
+  font-size: 46px;
+}
+@media (max-width: 760px) {
+  .twoColumns,
+  .demoCardGrid,
+  .demoExpenseForm,
+  .demoInlineForm {
+    grid-template-columns: 1fr;
+  }
+  .demoToolbar,
+  .demoToolbar > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .demoToolbar .primaryBtn {
+    width: 100%;
+  }
+  .demoRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .expenseValue {
+    justify-items: start;
+    text-align: left;
+  }
+  .dashboardHeader {
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .headerActions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .demoModeBadge {
+    order: -1;
+  }
+  .demoContent {
+    padding: 30px 18px;
+  }
+  .demoExpenseForm .primaryBtn {
+    grid-column: auto;
+  }
+}

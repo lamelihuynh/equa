@@ -18,6 +18,10 @@ export class IdentityConfigService {
     return process.env.IDENTITY_JWT_AUDIENCE ?? 'equa-clients';
   }
 
+  get serviceKey(): string | undefined {
+    return process.env.IDENTITY_SERVICE_KEY ?? process.env.SOCIAL_SERVICE_KEY;
+  }
+
   get accessTokenMinutes(): number {
     return Number(process.env.IDENTITY_ACCESS_TOKEN_MINUTES ?? 15);
   }

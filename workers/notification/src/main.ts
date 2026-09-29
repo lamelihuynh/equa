@@ -1,16 +1,76 @@
 import type { ServiceName } from '@equa/contracts';
+import { join } from 'node:path';
+import { config as loadEnv } from 'dotenv';
+
+import { InMemoryNotificationStore } from './in-memory.store.js';
+import { PostgresNotificationStore } from './database/postgres.store.js';
+import { DisabledNotificationProvider, NotificationWorker } from './notification.worker.js';
+import { consumeRabbit } from './rabbit.consumer.js';
+
+if (process.env.NODE_ENV !== 'test')
+  loadEnv({ path: join(process.cwd(), '../../.env'), quiet: true });
 
 const service: ServiceName = 'notification';
 
-// The real worker will consume integration events from RabbitMQ. Keeping this process alive makes
-// container/deployment wiring testable before business handlers are implemented.
-console.log(JSON.stringify({ level: 'info', message: 'worker scaffold ready', service }));
+const databaseUrl = process.env.NOTIFICATION_DATABASE_URL;
+const store = databaseUrl
+  ? new PostgresNotificationStore(databaseUrl)
+  : new InMemoryNotificationStore();
+const reportWorkerFailure = (stage: 'ingest' | 'poll'): void => {
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      service,
+      component: 'notification-worker',
+      stage,
+      message: 'Background notification operation failed; recovery or DLQ handling will continue.',
+    }),
+  );
+};
+const reportRabbitFailure = (notice: {
+  reason: 'connect' | 'connection' | 'message';
+  attempt: number;
+  delayMs: number;
+}): void => {
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      service,
+      component: 'rabbit-consumer',
+      message: 'RabbitMQ consumer will retry.',
+      ...notice,
+    }),
+  );
+};
+const worker = new NotificationWorker(
+  store,
+  new DisabledNotificationProvider(),
+  undefined,
+  reportWorkerFailure,
+);
+const stopPolling = worker.start();
+console.info(
+  JSON.stringify({
+    level: 'info',
+    message: databaseUrl
+      ? 'PostgreSQL worker ready; provider disabled'
+      : 'persistence not configured; worker disabled',
+    service,
+  }),
+);
+const rabbit =
+  databaseUrl && process.env.RABBITMQ_URL
+    ? consumeRabbit(process.env.RABBITMQ_URL, worker, 1_000, undefined, reportRabbitFailure)
+    : undefined;
 
 const shutdown = (signal: string): void => {
-  console.log(JSON.stringify({ level: 'info', message: 'worker stopping', service, signal }));
-  process.exit(0);
+  stopPolling();
+  console.info(JSON.stringify({ level: 'info', message: 'worker stopping', service, signal }));
+  void rabbit
+    ?.close()
+    .catch(() => undefined)
+    .finally(() => process.exit(0));
 };
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
-setInterval(() => undefined, 60_000);

@@ -12,6 +12,14 @@
 | Security    | PR + lịch tuần        | CodeQL/dependency scan; ZAP baseline ở staging                            |
 | Performance | Trước release lớn     | k6 theo P95/P99 trong SRS; theo dõi regression                            |
 
+## Khả năng xác minh hiện tại của branch
+
+Bảng trên là quality target. CI chạy unit/service suites theo component và health smoke của
+PostgreSQL/Redis/RabbitMQ/Kong, nhưng repository vẫn chưa có service-level Testcontainers,
+Playwright, Maestro/Detox hoặc cross-service E2E harness trong CI. In-memory vertical tests
+không được tính là PostgreSQL/RabbitMQ integration. Phase 10 đã chạy một kịch bản thủ công
+trên Compose local; phạm vi và giới hạn được ghi trong `docs/INTEGRATION_TESTING.md`.
+
 ## Logic tài chính
 
 Module split/balance/debt simplification phải có coverage tối thiểu 80% và property/invariant tests:

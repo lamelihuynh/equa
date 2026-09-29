@@ -10,11 +10,12 @@ import { IdentityConfigService } from './config/identity-config.service';
 import { DatabaseService } from './database/database.service';
 import { EmailService } from './email/email.service';
 import { HealthController } from './health.controller';
+import { IdentityController } from './identity/identity.controller';
 import { ProfileController } from './profile/profile.controller';
 import { AvatarService } from './profile/avatar.service';
 
 @Module({
-  controllers: [HealthController, AuthController, ProfileController],
+  controllers: [HealthController, AuthController, ProfileController, IdentityController],
   providers: [
     IdentityConfigService,
     DatabaseService,

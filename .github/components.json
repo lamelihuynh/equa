@@ -1,0 +1,85 @@
+{
+  "components": [
+    {
+      "id": "contracts",
+      "path": "packages/contracts",
+      "package": "@equa/contracts",
+      "kind": "package",
+      "deployable": false
+    },
+    {
+      "id": "identity",
+      "path": "services/identity",
+      "package": "@equa/identity-service",
+      "kind": "service",
+      "dockerfile": "infra/docker/node-service.Dockerfile",
+      "image": "identity",
+      "deployable": true,
+      "staging": {
+        "hookSecret": "RENDER_IDENTITY_DEPLOY_HOOK",
+        "smoke": { "kind": "http", "urlVar": "STAGING_API_BASE_URL", "path": "/health" }
+      }
+    },
+    {
+      "id": "ledger",
+      "path": "services/ledger",
+      "package": "@equa/ledger-service",
+      "kind": "service",
+      "dockerfile": "infra/docker/node-service.Dockerfile",
+      "image": "ledger",
+      "deployable": true
+    },
+    {
+      "id": "social",
+      "path": "services/social",
+      "package": "@equa/social-service",
+      "kind": "service",
+      "dockerfile": "infra/docker/node-service.Dockerfile",
+      "image": "social",
+      "deployable": true
+    },
+    {
+      "id": "automation-sync",
+      "path": "services/automation-sync",
+      "package": "@equa/automation-sync-service",
+      "kind": "service",
+      "dockerfile": "infra/docker/node-service.Dockerfile",
+      "image": "automation-sync",
+      "deployable": true
+    },
+    {
+      "id": "platform",
+      "path": "services/platform",
+      "package": "@equa/platform-service",
+      "kind": "service",
+      "dockerfile": "infra/docker/node-service.Dockerfile",
+      "image": "platform",
+      "deployable": true
+    },
+    {
+      "id": "notification",
+      "path": "workers/notification",
+      "package": "@equa/notification-worker",
+      "kind": "worker",
+      "dockerfile": "infra/docker/node-service.Dockerfile",
+      "image": "notification",
+      "deployable": true
+    },
+    {
+      "id": "web",
+      "path": "apps/web",
+      "package": "@equa/web",
+      "kind": "web",
+      "dockerfile": "apps/web/Dockerfile",
+      "image": "web",
+      "deployable": true
+    },
+    {
+      "id": "mobile",
+      "path": "apps/mobile",
+      "package": "@equa/mobile",
+      "kind": "mobile",
+      "deployable": false
+    }
+  ]
+}

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "dev": "expo start",
-    "lint": "eslint App.tsx app.config.ts",
+    "lint": "eslint App.tsx app.config.ts src",
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
     "typecheck": "tsc --noEmit"
@@ -15,7 +15,9 @@
     "@equa/contracts": "workspace:*",
     "expo": "~57.0.12",
     "expo-image-picker": "~57.0.1",
+    "expo-network": "~57.0.1",
     "expo-secure-store": "~57.0.1",
+    "expo-sqlite": "~57.0.2",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-native": "0.86.2",

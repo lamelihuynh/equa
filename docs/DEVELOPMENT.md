@@ -36,6 +36,36 @@ Thiết lập branch protection cho `main` trên GitHub:
 - Shared package chỉ chứa contract/value không có business/domain entity hoặc ORM model.
 - Event publish bằng transactional outbox; consumer idempotent và có DLQ.
 
+## Migration database local
+
+PostgreSQL phải đang chạy trước khi chạy migration:
+
+```powershell
+pnpm infra:up
+pnpm --filter @equa/social-service db:migrate
+pnpm --filter @equa/identity-service db:migrate
+```
+
+Root `.env` cần có `SOCIAL_DATABASE_URL` trỏ đến `equa_social` (xem `.env.example`). Với volume
+đã tồn tại, lệnh Social tự tạo database nếu user có `CREATEDB`; nếu không, administrator tạo
+`equa_social` trong database `postgres` trước rồi chạy lại lệnh migration.
+
+Nếu cần tạo thủ công vì user ứng dụng không có `CREATEDB` (chỉ chạy khi database chưa tồn tại):
+
+```powershell
+docker compose --env-file .env -f infra/compose/docker-compose.yml exec -T postgres sh -lc 'psql -U "$POSTGRES_USER" -d postgres -c "CREATE DATABASE equa_social;"'
+```
+
+Lệnh Social đọc `SOCIAL_DATABASE_URL`, kết nối vào database quản trị `postgres` để tạo
+`equa_social` nếu database chưa tồn tại, rồi mới chạy các file migration của Social. Lệnh này
+an toàn khi chạy lại. Nếu user PostgreSQL không có quyền `CREATEDB`, hãy tạo database bằng
+administrator rồi chạy lại lệnh trên. Không dùng `docker-entrypoint-initdb.d/init.sql` để sửa volume
+đã tồn tại: file init chỉ chạy khi PostgreSQL khởi tạo volume mới.
+
+Migration Identity cũng cần chạy trên database cũ để thêm cột `users.username`; trường `username`
+trong payload register vẫn là tùy chọn, nên payload cũ chỉ gồm `displayName`, `email` và `password`
+tiếp tục hợp lệ sau khi migration hoàn tất.
+
 ## Phân công gợi ý cho 5 developer
 
 Không cố định vĩnh viễn, nhưng mỗi phần có primary và secondary reviewer:

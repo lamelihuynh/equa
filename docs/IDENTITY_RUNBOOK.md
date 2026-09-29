@@ -29,19 +29,19 @@ Route Kong nằm tại `infra/kong/kong.yml`. Ở local, upstream Identity là
 `host.docker.internal:3001` và nhận `/v1/auth`, `/v1/profile`, `/v1/identity`.
 Kong tạo hoặc truyền `X-Correlation-ID`; Identity trả lại header này trong response và lưu vào audit.
 
-| Thành phần | Trách nhiệm | Dữ liệu trạng thái |
-| --- | --- | --- |
-| NestJS Identity | đăng ký, đăng nhập, xác minh/xoay token, đặt lại mật khẩu, hồ sơ | không có ngoài các dependency |
-| PostgreSQL | người dùng, hồ sơ, phiên, token một lần, audit log, lịch sử migration | `equa_identity` |
-| Kong | điểm vào công khai, khớp route, CORS, giới hạn dung lượng và rate limit dùng Redis | cấu hình khai báo |
-| Redis | bộ đếm rate limit của Kong; các nhu cầu session/rate limit sau này | dữ liệu cache tạm/lưu bền |
-| Mailpit / Resend | bắt email local / email giao dịch thật | thư được giữ bởi nhà cung cấp |
-| MinIO | chỉ lưu object avatar; database lưu object key | object S3 |
+| Thành phần       | Trách nhiệm                                                                        | Dữ liệu trạng thái            |
+| ---------------- | ---------------------------------------------------------------------------------- | ----------------------------- |
+| NestJS Identity  | đăng ký, đăng nhập, xác minh/xoay token, đặt lại mật khẩu, hồ sơ                   | không có ngoài các dependency |
+| PostgreSQL       | người dùng, hồ sơ, phiên, token một lần, audit log, lịch sử migration              | `equa_identity`               |
+| Kong             | điểm vào công khai, khớp route, CORS, giới hạn dung lượng và rate limit dùng Redis | cấu hình khai báo             |
+| Redis            | bộ đếm rate limit của Kong; các nhu cầu session/rate limit sau này                 | dữ liệu cache tạm/lưu bền     |
+| Mailpit / Resend | bắt email local / email giao dịch thật                                             | thư được giữ bởi nhà cung cấp |
+| MinIO            | chỉ lưu object avatar; database lưu object key                                     | object S3                     |
 
 ## 2. Luồng xác thực
 
 1. `POST /v1/auth/register` kiểm tra payload, băm mật khẩu bằng Argon2id, tạo người dùng/hồ sơ
-   `UNVERIFIED`, lưu *hash* của token xác minh dùng một lần, ghi audit log, rồi gửi link qua Mailpit
+   `UNVERIFIED`, lưu _hash_ của token xác minh dùng một lần, ghi audit log, rồi gửi link qua Mailpit
    (local) hoặc Resend (staging).
 2. `POST /v1/auth/verify-email` sử dụng token đó và kích hoạt tài khoản.
 3. `POST /v1/auth/login` cấp access JWT đã ký (mặc định 15 phút) và refresh token opaque (mặc định
@@ -86,13 +86,13 @@ pnpm --filter @equa/web dev
 pnpm --filter @equa/mobile start
 ```
 
-| Địa chỉ | Ý nghĩa |
-| --- | --- |
-| `http://localhost:8000/v1/docs` | Swagger qua Kong, khi Kong và Identity đều chạy |
-| `http://localhost:3001/v1/docs` | Swagger gọi trực tiếp Identity; chỉ dùng debug, client dùng Kong |
-| `http://localhost:8025` | Hộp thư Mailpit cho email xác minh/đặt lại |
-| `http://localhost:9001` | Console MinIO |
-| `http://localhost:15672` | Console RabbitMQ; không cần cho luồng xác thực đồng bộ của Identity |
+| Địa chỉ                         | Ý nghĩa                                                             |
+| ------------------------------- | ------------------------------------------------------------------- |
+| `http://localhost:8000/v1/docs` | Swagger qua Kong, khi Kong và Identity đều chạy                     |
+| `http://localhost:3001/v1/docs` | Swagger gọi trực tiếp Identity; chỉ dùng debug, client dùng Kong    |
+| `http://localhost:8025`         | Hộp thư Mailpit cho email xác minh/đặt lại                          |
+| `http://localhost:9001`         | Console MinIO                                                       |
+| `http://localhost:15672`        | Console RabbitMQ; không cần cho luồng xác thực đồng bộ của Identity |
 
 ## 4. Cách kiểm thử
 
@@ -145,15 +145,15 @@ Giá trị mặc định local nằm ở `.env.example`; giá trị thật phả
 trường được mã hóa của Render ở staging. Không commit hoặc ghi log URL database, JWT secret, Resend
 key, mật khẩu SMTP hay S3 secret.
 
-| Nhóm biến | Dùng cho | Ghi chú |
-| --- | --- | --- |
-| `IDENTITY_DATABASE_URL` | migration và service | chỉ trỏ đến `equa_identity` |
-| `IDENTITY_JWT_SECRET`, `IDENTITY_JWT_ISSUER`, `IDENTITY_JWT_AUDIENCE` | token | secret riêng cho từng môi trường |
-| `EMAIL_PROVIDER`, `EMAIL_FROM`, `RESEND_API_KEY` | email staging thật | staging dùng Resend; domain người gửi phải xác thực |
-| `SMTP_HOST`, `SMTP_PORT` | Mailpit local | chỉ local |
-| `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_AVATAR_BUCKET` | avatar | MinIO local, lưu trữ tương thích được quản lý ở staging |
-| `APP_WEB_URL` | link email | URL Vercel staging tại staging |
-| `REDIS_URL` | kiểm soát cấp ứng dụng tương lai | Kong hiện kết nối trực tiếp Redis của Compose |
+| Nhóm biến                                                                        | Dùng cho                         | Ghi chú                                                 |
+| -------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------- |
+| `IDENTITY_DATABASE_URL`                                                          | migration và service             | chỉ trỏ đến `equa_identity`                             |
+| `IDENTITY_JWT_SECRET`, `IDENTITY_JWT_ISSUER`, `IDENTITY_JWT_AUDIENCE`            | token                            | secret riêng cho từng môi trường                        |
+| `EMAIL_PROVIDER`, `EMAIL_FROM`, `RESEND_API_KEY`                                 | email staging thật               | staging dùng Resend; domain người gửi phải xác thực     |
+| `SMTP_HOST`, `SMTP_PORT`                                                         | Mailpit local                    | chỉ local                                               |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_AVATAR_BUCKET` | avatar                           | MinIO local, lưu trữ tương thích được quản lý ở staging |
+| `APP_WEB_URL`                                                                    | link email                       | URL Vercel staging tại staging                          |
+| `REDIS_URL`                                                                      | kiểm soát cấp ứng dụng tương lai | Kong hiện kết nối trực tiếp Redis của Compose           |
 
 ## 6. Deploy lên staging
 
@@ -182,16 +182,16 @@ Actions trước khi chạy lại.
 
 ## 7. Vận hành và chẩn đoán
 
-| Triệu chứng | Kiểm tra | Cách xử lý |
-| --- | --- | --- |
-| `IDENTITY_DATABASE_URL must be configured` | `.env` root có key khác rỗng; chạy từ root repository | copy `.env.example`, đặt URL, chạy lại migration |
-| migration không kết nối được | `pnpm infra:up`, trạng thái Compose, host/cổng DB | chạy Docker hoặc sửa URL; không tùy tiện xóa volume |
-| Kong `404` | path gọi và `infra/kong/kong.yml` | dùng `/v1/auth` hoặc `/v1/profile`, sau đó restart/deploy Kong sau khi đổi config |
-| Kong `502/503` | tiến trình Identity cổng 3001; log Kong | chạy Identity hoặc sửa upstream |
-| `401` ở profile | bearer header và hạn access token | login/refresh rồi gửi lại header Authorization |
-| không có email | Mailpit local; cấu hình/domain provider staging | xem log provider; không để lộ token trong log |
-| upload avatar lỗi | 2 MB/loại file, MinIO, credential/bucket | sửa cấu hình object storage và giữ quan hệ DB/object |
-| deploy lỗi sau khi push image | Render hook trong Actions và health gateway | kiểm tra hook, log Render, sau đó route gateway |
+| Triệu chứng                                | Kiểm tra                                              | Cách xử lý                                                                        |
+| ------------------------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `IDENTITY_DATABASE_URL must be configured` | `.env` root có key khác rỗng; chạy từ root repository | copy `.env.example`, đặt URL, chạy lại migration                                  |
+| migration không kết nối được               | `pnpm infra:up`, trạng thái Compose, host/cổng DB     | chạy Docker hoặc sửa URL; không tùy tiện xóa volume                               |
+| Kong `404`                                 | path gọi và `infra/kong/kong.yml`                     | dùng `/v1/auth` hoặc `/v1/profile`, sau đó restart/deploy Kong sau khi đổi config |
+| Kong `502/503`                             | tiến trình Identity cổng 3001; log Kong               | chạy Identity hoặc sửa upstream                                                   |
+| `401` ở profile                            | bearer header và hạn access token                     | login/refresh rồi gửi lại header Authorization                                    |
+| không có email                             | Mailpit local; cấu hình/domain provider staging       | xem log provider; không để lộ token trong log                                     |
+| upload avatar lỗi                          | 2 MB/loại file, MinIO, credential/bucket              | sửa cấu hình object storage và giữ quan hệ DB/object                              |
+| deploy lỗi sau khi push image              | Render hook trong Actions và health gateway           | kiểm tra hook, log Render, sau đó route gateway                                   |
 
 Dùng `X-Correlation-ID` từ response client để liên kết log Kong, Identity và audit. Phải che access
 token, refresh token và credential trong log/ảnh chụp.
@@ -206,9 +206,9 @@ token, refresh token và credential trong log/ảnh chụp.
 
 ## 9. Checklist theo trách nhiệm
 
-| Nhóm phụ trách | Việc cần làm trước demo/release sprint |
-| --- | --- |
-| Backend | migration, các cổng kiểm tra tự động và kịch bản xác thực thủ công |
-| QA | expected/actual cho đăng ký, xác minh, login, refresh, logout, reset, profile, avatar và trường hợp lỗi |
-| DevOps | bảo vệ `develop`, cấu hình secret GitHub/Render/gateway, log và chính sách backup |
-| Frontend/Mobile | chỉ gọi gateway; web bật credentials; mobile lưu refresh token an toàn |
+| Nhóm phụ trách  | Việc cần làm trước demo/release sprint                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------------- |
+| Backend         | migration, các cổng kiểm tra tự động và kịch bản xác thực thủ công                                      |
+| QA              | expected/actual cho đăng ký, xác minh, login, refresh, logout, reset, profile, avatar và trường hợp lỗi |
+| DevOps          | bảo vệ `develop`, cấu hình secret GitHub/Render/gateway, log và chính sách backup                       |
+| Frontend/Mobile | chỉ gọi gateway; web bật credentials; mobile lưu refresh token an toàn                                  |
