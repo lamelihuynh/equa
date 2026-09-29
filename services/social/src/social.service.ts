@@ -371,6 +371,10 @@ export class SocialService {
     return this.repository.listMembers(groupId);
   }
 
+  async listGroups(actor: AuthenticatedSocialUser): Promise<Group[]> {
+    return this.repository.listGroupsForMember(actor.id);
+  }
+
   async getGroup(actor: AuthenticatedSocialUser, groupId: string): Promise<Group> {
     await this.requireMember(actor.id, groupId);
     const group = await this.repository.findGroup(groupId);

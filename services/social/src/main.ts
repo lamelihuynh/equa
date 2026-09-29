@@ -1,4 +1,8 @@
+import { randomUUID } from 'node:crypto';
+import type { IncomingMessage } from 'node:http';
+
 import { config as loadEnv } from 'dotenv';
+import { join } from 'node:path';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { jwtVerify } from 'jose';
 
@@ -18,7 +22,8 @@ import { InMemorySocialRepository, type SocialRepository } from './social.reposi
 import { SocialService, type AuthenticatedSocialUser } from './social.service.js';
 import type { GroupType } from './types.js';
 
-loadEnv();
+if (process.env.NODE_ENV !== 'test')
+  loadEnv({ path: join(process.cwd(), '../../.env'), quiet: true });
 
 export interface SocialServerOptions {
   repository?: SocialRepository;
@@ -37,7 +42,32 @@ export async function buildServer(
   const identity = options.identity ?? createIdentityDirectory();
   const ledger = options.ledger ?? createLedgerAdapter();
   const service = new SocialService(repository, identity, ledger);
-  const app = Fastify();
+  const app = Fastify({
+    logger: {
+      level: process.env.LOG_LEVEL ?? (process.env.NODE_ENV === 'test' ? 'silent' : 'info'),
+      base: { service: 'social' },
+      redact: {
+        paths: [
+          'req.headers.authorization',
+          'req.headers.cookie',
+          'req.headers["x-equa-service-key"]',
+        ],
+        censor: '[REDACTED]',
+      },
+      serializers: {
+        req: (request) => ({
+          method: request.method,
+          route: request.routeOptions.url ?? request.url.split('?')[0],
+        }),
+      },
+    },
+    genReqId: correlationIdFor,
+    requestIdLogLabel: 'correlationId',
+  });
+  app.addHook('onSend', async (request, reply, payload) => {
+    reply.header('x-correlation-id', request.id);
+    return payload;
+  });
 
   app.addHook('preHandler', async (request, reply) => {
     if (request.url === '/health' || request.url.startsWith('/internal/')) return;
@@ -126,6 +156,9 @@ export async function buildServer(
     wrap(reply, async () => reply.send(await service.listFriends(user(request)))),
   );
 
+  app.get('/v1/groups', async (request, reply) =>
+    wrap(reply, async () => reply.send(await service.listGroups(user(request)))),
+  );
   app.post('/v1/groups', async (request, reply) =>
     wrap(reply, async () => {
       const body = record(request.body);
@@ -232,6 +265,10 @@ function user(request: FastifyRequest): AuthenticatedSocialUser {
   if (!current) throw new SocialError('UNAUTHORIZED', 'Authentication is required.', 401);
   return current;
 }
+function correlationIdFor(request: IncomingMessage): string {
+  const candidate = request.headers['x-correlation-id'];
+  return typeof candidate === 'string' && isUuid(candidate) ? candidate : randomUUID();
+}
 type RouteParams = { id: string; friendId: string; userId: string };
 function params(request: FastifyRequest): RouteParams {
   return request.params as RouteParams;
@@ -248,6 +285,9 @@ function stringValue(value: unknown, field: string): string {
 }
 function isGroupType(value: unknown): value is GroupType {
   return value === 'trip' || value === 'household' || value === 'event' || value === 'other';
+}
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 function groupTypeValue(value: unknown): GroupType {
   if (!isGroupType(value)) throw new SocialError('INVALID_GROUP_TYPE', 'Group type is invalid.');

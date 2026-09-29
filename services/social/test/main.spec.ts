@@ -43,6 +43,13 @@ describe('Social HTTP boundary', () => {
       ledger,
       serviceKey: 'service-secret',
     });
+    const correlationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const health = await app.inject({
+      method: 'GET',
+      url: '/health',
+      headers: { 'x-correlation-id': correlationId },
+    });
+    expect(health.headers['x-correlation-id']).toBe(correlationId);
     expect(
       (
         await app.inject({
@@ -72,6 +79,17 @@ describe('Social HTTP boundary', () => {
     });
     expect(group.statusCode).toBe(201);
     const groupId = group.json<{ id: string }>().id;
+    const ownGroups = await app.inject({ method: 'GET', url: '/v1/groups', headers: auth });
+    expect(ownGroups.statusCode).toBe(200);
+    expect(ownGroups.json<Array<{ id: string }>>().map((item) => item.id)).toEqual([groupId]);
+    const otherUserGroups = await app.inject({
+      method: 'GET',
+      url: '/v1/groups',
+      headers: {
+        authorization: `Bearer ${await token('secret', 'bob', 'bob@example.test')}`,
+      },
+    });
+    expect(otherUserGroups.json()).toEqual([]);
     const internal = await app.inject({
       method: 'POST',
       url: '/internal/groups/member',
@@ -86,6 +104,14 @@ describe('Social HTTP boundary', () => {
       payload: { groupId, userId: 'alice' },
     });
     expect(forbiddenInternal.statusCode).toBe(403);
+    const dissolved = await app.inject({
+      method: 'DELETE',
+      url: `/v1/groups/${groupId}`,
+      headers: auth,
+    });
+    expect(dissolved.statusCode).toBe(204);
+    const afterDissolve = await app.inject({ method: 'GET', url: '/v1/groups', headers: auth });
+    expect(afterDissolve.json()).toEqual([]);
     await app.close();
   });
 });

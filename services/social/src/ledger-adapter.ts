@@ -1,5 +1,7 @@
 import type { PairBalance } from './types.js';
 
+const INTERNAL_HTTP_TIMEOUT_MS = 3_000;
+
 export class LedgerUnavailableError extends Error {
   constructor(message = 'Ledger is unavailable.') {
     super(message);
@@ -62,6 +64,7 @@ export class HttpSocialLedgerAdapter implements SocialLedgerAdapter {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-equa-service-key': this.serviceKey },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(INTERNAL_HTTP_TIMEOUT_MS),
       });
     } catch (error) {
       throw new LedgerUnavailableError(

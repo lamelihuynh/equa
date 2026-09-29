@@ -27,6 +27,7 @@ export interface SocialRepository {
   createGroup(row: Group): Promise<void>;
   /** Atomically creates the group and its creator-admin membership. */
   createGroupWithAdmin(group: Group, member: GroupMember): Promise<void>;
+  listGroupsForMember(userId: string): Promise<Group[]>;
   findGroup(id: string): Promise<Group | undefined>;
   saveGroup(row: Group): Promise<void>;
   addMember(row: GroupMember): Promise<void>;
@@ -171,6 +172,18 @@ export class InMemorySocialRepository implements SocialRepository {
   }
   findGroup(id: string): Promise<Group | undefined> {
     return Promise.resolve(this.clone(this.groups.get(id)));
+  }
+  listGroupsForMember(userId: string): Promise<Group[]> {
+    const groups = [...this.members.values()]
+      .filter((member) => member.userId === userId)
+      .map((member) => this.groups.get(member.groupId))
+      .filter((group): group is Group => Boolean(group && !group.dissolvedAt))
+      .sort(
+        (left, right) =>
+          right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id),
+      )
+      .map((group) => structuredClone(group));
+    return Promise.resolve(groups);
   }
   saveGroup(row: Group): Promise<void> {
     this.groups.set(row.id, structuredClone(row));

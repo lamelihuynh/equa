@@ -1,6 +1,8 @@
 import type { IdentityUserResolution } from '@equa/contracts';
 import type { SocialUser } from './types.js';
 
+const INTERNAL_HTTP_TIMEOUT_MS = 3_000;
+
 export interface IdentityDirectory {
   resolveIdentifier(identifier: string): Promise<SocialUser | undefined>;
 }
@@ -31,6 +33,7 @@ export class HttpIdentityDirectory implements IdentityDirectory {
     try {
       response = await this.fetcher(url, {
         headers: { accept: 'application/json', 'x-equa-service-key': this.serviceKey },
+        signal: AbortSignal.timeout(INTERNAL_HTTP_TIMEOUT_MS),
       });
     } catch (error) {
       throw new IdentityLookupUnavailableError(

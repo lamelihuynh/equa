@@ -263,6 +263,13 @@ export class SocialDatabase implements SocialRepository {
     const r = await this.pool.query<GroupRow>('SELECT * FROM social_groups WHERE id=$1', [id]);
     return r.rows[0] ? toGroup(r.rows[0]) : undefined;
   }
+  async listGroupsForMember(userId: string): Promise<Group[]> {
+    const result = await this.pool.query<GroupRow>(
+      'SELECT g.* FROM social_groups g JOIN group_members m ON m.group_id=g.id WHERE m.user_id=$1 AND g.dissolved_at IS NULL ORDER BY g.updated_at DESC,g.id',
+      [userId],
+    );
+    return result.rows.map(toGroup);
+  }
   async saveGroup(row: Group): Promise<void> {
     await this.pool.query(
       'UPDATE social_groups SET name=$2,image_url=$3,type=$4,dissolved_at=$5,updated_at=$6 WHERE id=$1',

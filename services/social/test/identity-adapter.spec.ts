@@ -23,6 +23,7 @@ describe('HttpIdentityDirectory', () => {
         headers: { accept: 'application/json', 'x-equa-service-key': 'shared-key' },
       }),
     );
+    expect(fetcher.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('distinguishes not found from an unavailable Identity service', async () => {
@@ -39,6 +40,15 @@ describe('HttpIdentityDirectory', () => {
       vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 })),
     );
     await expect(unavailable.resolveIdentifier('bob')).rejects.toBeInstanceOf(
+      IdentityLookupUnavailableError,
+    );
+
+    const timedOut = new HttpIdentityDirectory(
+      'http://identity.test',
+      'shared-key',
+      vi.fn<typeof fetch>().mockRejectedValue(new DOMException('timed out', 'TimeoutError')),
+    );
+    await expect(timedOut.resolveIdentifier('bob')).rejects.toBeInstanceOf(
       IdentityLookupUnavailableError,
     );
   });
