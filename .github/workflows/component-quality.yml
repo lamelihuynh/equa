@@ -1,0 +1,59 @@
+name: Component quality
+
+on:
+  workflow_call:
+    inputs:
+      component_id:
+        required: true
+        type: string
+      package_name:
+        required: true
+        type: string
+      component_path:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ inputs.component_id }} quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build workspace dependencies and component
+        env:
+          COMPONENT_PACKAGE: ${{ inputs.package_name }}
+        run: pnpm --filter "${COMPONENT_PACKAGE}..." build
+      - name: Lint
+        env:
+          COMPONENT_PACKAGE: ${{ inputs.package_name }}
+        run: pnpm --filter "$COMPONENT_PACKAGE" lint
+      - name: Typecheck
+        env:
+          COMPONENT_PACKAGE: ${{ inputs.package_name }}
+        run: pnpm --filter "$COMPONENT_PACKAGE" typecheck
+      - name: Test
+        env:
+          COMPONENT_PACKAGE: ${{ inputs.package_name }}
+        run: pnpm --filter "$COMPONENT_PACKAGE" test
+      - name: Coverage when supported
+        env:
+          COMPONENT_PACKAGE: ${{ inputs.package_name }}
+          COMPONENT_PATH: ${{ inputs.component_path }}
+        run: |
+          if node -e "process.exit(require('./' + process.env.COMPONENT_PATH + '/package.json').scripts?.['test:coverage'] ? 0 : 1)"; then
+            pnpm --filter "$COMPONENT_PACKAGE" test:coverage
+          else
+            echo "No test:coverage script for $COMPONENT_PACKAGE"
+          fi
