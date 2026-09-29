@@ -62,10 +62,29 @@ export class AuthService {
     assertPasswordPolicy(input.password);
     const email = input.email.trim().toLowerCase();
     const username = input.username?.trim().toLowerCase() || null;
-    const existing = await this.database.query<{ id: string }>(
-      'SELECT id FROM users WHERE email = $1 OR ($2 IS NOT NULL AND lower(username) = $2)',
-      [email, username],
-    );
+    const existing = username
+      ? await this.database.query<{
+          id: string;
+          email: string;
+          username: string | null;
+        }>(
+          `SELECT id, email, username
+       FROM users
+       WHERE email = $1 OR lower(username) = $2
+       LIMIT 1`,
+          [email, username],
+        )
+      : await this.database.query<{
+          id: string;
+          email: string;
+          username: string | null;
+        }>(
+          `SELECT id, email, username
+       FROM users
+       WHERE email = $1
+       LIMIT 1`,
+          [email],
+        );
     if (existing.rowCount)
       throw new ApiException(
         'AUTH_EMAIL_ALREADY_EXISTS',
