@@ -42,7 +42,6 @@ services:
           - /health
           - /v1/auth
           - /v1/profile
-          - /v1/identity
           - /v1/docs
         strip_path: false
 
@@ -52,9 +51,7 @@ services:
       - name: ledger-routes
         paths:
           - /v1/expenses
-          - /v1/balances
-          - /v1/settlements
-          - /v1/ledger
+          - /v1/categories
         strip_path: false
 
   - name: social-service
@@ -73,17 +70,4 @@ services:
         paths:
           - /v1/sync
           - /v1/recurring
-        strip_path: false
-
-  - name: platform-service
-    url: http://host.docker.internal:3003
-    routes:
-      - name: platform-routes
-        paths:
-          - /v1/subscriptions
-          - /v1/payments
-          - /v1/currency
-          - /v1/receipts
-          - /v1/admin
-          - /v1/platform
         strip_path: false

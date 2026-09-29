@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "build": "next build",
-    "dev": "next dev --port ${WEB_PORT:-3000}",
+    "dev": "next dev --port 3000",
     "lint": "eslint app next.config.ts",
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@equa/contracts": "workspace:*",
     "next": "16.3.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
