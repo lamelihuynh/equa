@@ -18,9 +18,9 @@ describe('Profile preferences validation', () => {
     it('rejects unsupported currencies', () => {
       const invalid = ['BTC', 'XRP', 'CNY', 'AUD', 'CAD'];
       for (const currency of invalid) {
-        expect(SUPPORTED_CURRENCIES.includes(currency as typeof SUPPORTED_CURRENCIES[number])).toBe(
-          false,
-        );
+        expect(
+          SUPPORTED_CURRENCIES.includes(currency as (typeof SUPPORTED_CURRENCIES)[number]),
+        ).toBe(false);
       }
     });
   });
@@ -40,7 +40,9 @@ describe('Profile preferences validation', () => {
     it('rejects unsupported languages', () => {
       const invalid = ['de', 'pt', 'th', 'ru'];
       for (const lang of invalid) {
-        expect(SUPPORTED_LANGUAGES.includes(lang as typeof SUPPORTED_LANGUAGES[number])).toBe(false);
+        expect(SUPPORTED_LANGUAGES.includes(lang as (typeof SUPPORTED_LANGUAGES)[number])).toBe(
+          false,
+        );
       }
     });
   });
