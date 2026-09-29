@@ -86,6 +86,10 @@ export async function buildServer(
     genReqId: correlationIdFor,
     requestIdLogLabel: 'correlationId',
   });
+  await app.register(rateLimit, {
+    max: options.rateLimitMax ?? 120,
+    timeWindow: '1 minute',
+  });
   app.addHook('onSend', async (request, reply, payload) => {
     reply.header('x-correlation-id', request.id);
     return payload;
@@ -105,16 +109,6 @@ export async function buildServer(
       return reply.code(401).send({ message: 'Invalid access token.' });
     }
   });
-  await app.register(rateLimit, {
-    max: options.rateLimitMax ?? 120,
-    timeWindow: '1 minute',
-    hook: 'preHandler',
-    keyGenerator: (request) => {
-      const owner = request.headers['x-equa-owner'];
-      return typeof owner === 'string' ? `owner:${owner}` : `ip:${request.ip}`;
-    },
-  });
-
   app.get('/health', { config: { rateLimit: false } }, () => ({
     status: 'ok',
     service: 'automation-sync',

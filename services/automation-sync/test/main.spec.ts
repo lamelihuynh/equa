@@ -210,24 +210,16 @@ describe('automation HTTP boundary', () => {
     await app.close();
   });
 
-  it('rate limits authenticated sync requests by owner', async () => {
-    const app = await buildServer(
-      secret,
-      undefined,
-      new SyncService(new DisabledLedgerAdapter(), new InMemorySyncReceiptStore()),
-      undefined,
-      { rateLimitMax: 2 },
-    );
-    const authorization = `Bearer ${await token()}`;
+  it('rate limits requests before authentication', async () => {
+    const app = await buildServer(secret, undefined, undefined, undefined, { rateLimitMax: 2 });
     const request = {
       method: 'POST' as const,
       url: '/v1/sync',
-      headers: { authorization },
       payload: {},
     };
 
-    expect((await app.inject(request)).statusCode).toBe(400);
-    expect((await app.inject(request)).statusCode).toBe(400);
+    expect((await app.inject(request)).statusCode).toBe(401);
+    expect((await app.inject(request)).statusCode).toBe(401);
     expect((await app.inject(request)).statusCode).toBe(429);
     await app.close();
   });

@@ -167,16 +167,15 @@ describe('Ledger HTTP boundary', () => {
     await app.close();
   });
 
-  it('rate limits authenticated API requests by user', async () => {
+  it('rate limits requests before authentication', async () => {
     const app = await buildLedgerServer('secret', {
       repository: new InMemoryExpenseRepository(),
       rateLimitMax: 2,
     });
-    const authorization = `Bearer ${await token('secret', ownerId, 'person@example.com')}`;
-    const request = { method: 'GET' as const, url: '/v1/categories', headers: { authorization } };
+    const request = { method: 'GET' as const, url: '/v1/categories' };
 
-    expect((await app.inject(request)).statusCode).toBe(200);
-    expect((await app.inject(request)).statusCode).toBe(200);
+    expect((await app.inject(request)).statusCode).toBe(401);
+    expect((await app.inject(request)).statusCode).toBe(401);
     expect((await app.inject(request)).statusCode).toBe(429);
     await app.close();
   });

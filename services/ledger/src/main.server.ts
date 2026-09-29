@@ -67,6 +67,10 @@ export async function buildLedgerServer(
     genReqId: correlationIdFor,
     requestIdLogLabel: 'correlationId',
   });
+  await app.register(rateLimit, {
+    max: options.rateLimitMax ?? 120,
+    timeWindow: '1 minute',
+  });
   app.addHook('onSend', async (request, reply, payload) => {
     reply.header('x-correlation-id', request.id);
     return payload;
@@ -88,12 +92,6 @@ export async function buildLedgerServer(
     } catch {
       await reply.code(401).send({ code: 'UNAUTHORIZED', message: 'Invalid access token.' });
     }
-  });
-  await app.register(rateLimit, {
-    max: options.rateLimitMax ?? 120,
-    timeWindow: '1 minute',
-    hook: 'preHandler',
-    keyGenerator: (request) => (request.user ? `user:${request.user.id}` : `ip:${request.ip}`),
   });
   app.get('/health', { config: { rateLimit: false } }, () => ({
     status: 'ok',
