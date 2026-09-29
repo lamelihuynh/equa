@@ -1,15 +1,19 @@
 import {
   parseDomainEvent,
+  type SyncConflictResolutionRequest,
   type SyncOperation,
   type SyncRequest,
   type SyncResult,
 } from '@equa/contracts';
 
-import type { LocalOperation, LocalStore } from '../db/local-store';
+import type { LocalConflictSummary, LocalOperation, LocalStore } from '../db/local-store';
+
+const STORE_RECOVERY_DELAY_MS = 30_000;
 
 export interface SyncTransport {
   push(accessToken: string, request: SyncRequest): Promise<SyncResult[]>;
   pull?(accessToken: string, cursor?: string): Promise<{ cursor?: string; events: unknown[] }>;
+  resolveConflict?(accessToken: string, request: SyncConflictResolutionRequest): Promise<void>;
 }
 
 export interface Connectivity {
@@ -24,6 +28,13 @@ export class SyncTransportError extends Error {
     readonly retryable = status === undefined || status === 408 || status === 429 || status >= 500,
   ) {
     super(code ?? (status ? `Sync failed (${status}).` : 'Network sync failure.'));
+  }
+}
+
+export class SyncAuthenticationUnavailableError extends Error {
+  constructor(message = 'Identity session refresh is unavailable.') {
+    super(message);
+    this.name = 'SyncAuthenticationUnavailableError';
   }
 }
 
@@ -61,6 +72,47 @@ export class SyncClient {
     });
     void this.pullOnce(ownerId).catch(() => this.schedulePullRetry(ownerId));
     void this.reschedule(ownerId);
+  }
+  conflictSummaries(ownerId: string): Promise<LocalConflictSummary[]> {
+    return this.store.listConflicts(ownerId);
+  }
+  async resolveConflict(ownerId: string, conflict: LocalConflictSummary): Promise<void> {
+    if (!this.transport.resolveConflict)
+      throw new Error('Conflict resolution is unavailable in this transport.');
+    const generation = this.generation;
+    const resolveOnServer = (
+      accessToken: string,
+      request: SyncConflictResolutionRequest,
+    ): Promise<void> => this.transport.resolveConflict!(accessToken, request);
+    const token = await this.access();
+    if (!token || this.stopped || generation !== this.generation)
+      throw new SyncAuthenticationUnavailableError('Sign in again to resolve this conflict.');
+    const request: SyncConflictResolutionRequest = {
+      version: 1,
+      deviceId: conflict.deviceId,
+      operationId: conflict.operationId,
+      resolution: 'discard',
+    };
+    try {
+      await resolveOnServer(token, request);
+    } catch (error) {
+      if (!(error instanceof SyncTransportError) || error.status !== 401) throw error;
+      const refreshed = await this.access(true);
+      if (!refreshed || this.stopped || generation !== this.generation)
+        throw new SyncAuthenticationUnavailableError('Sign in again to resolve this conflict.');
+      await resolveOnServer(refreshed, request);
+    }
+    if (this.stopped || generation !== this.generation)
+      throw new Error('Session changed while resolving the sync conflict.');
+    await this.store.resolveConflict(ownerId, conflict.operationId);
+    try {
+      await this.pullOnce(ownerId, generation);
+    } catch {
+      this.schedulePullRetry(ownerId);
+    }
+  }
+  subscribe(listener: () => void): () => void {
+    return this.store.subscribe(listener);
   }
   stop(): void {
     this.stopped = true;
@@ -109,7 +161,14 @@ export class SyncClient {
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = undefined;
     if (this.stopped || !this.online) return;
-    const wakeAt = await this.store.nextWakeAt(ownerId);
+    let wakeAt: number | undefined;
+    try {
+      wakeAt = await this.store.nextWakeAt(ownerId);
+    } catch {
+      if (generation === this.scheduleGeneration && !this.stopped && this.online)
+        this.scheduleAt(ownerId, this.now() + STORE_RECOVERY_DELAY_MS);
+      return;
+    }
     if (
       generation !== this.scheduleGeneration ||
       this.stopped ||
@@ -134,12 +193,32 @@ export class SyncClient {
       if (!rows.length || this.stopped || generation !== this.generation) return;
       const firstDevice = rows[0]!.deviceId;
       const batch = rows.filter((row) => row.deviceId === firstDevice);
-      const token = await this.access();
-      if (!token || this.stopped || generation !== this.generation) return;
+      let token: string | null;
+      try {
+        token = await this.access();
+      } catch (error) {
+        if (this.stopped || generation !== this.generation) return;
+        await this.deferBatchForAuthentication(ownerId, batch, error);
+        return;
+      }
+      if (this.stopped || generation !== this.generation) return;
+      if (!token) {
+        await this.deferBatchForAuthentication(
+          ownerId,
+          batch,
+          new SyncAuthenticationUnavailableError('No active access token.'),
+        );
+        return;
+      }
       try {
         const results = await this.send(token, batch, generation);
         await this.applyResults(ownerId, batch, results, generation);
       } catch (error) {
+        if (this.stopped || generation !== this.generation) return;
+        if (error instanceof SyncAuthenticationUnavailableError) {
+          await this.deferBatchForAuthentication(ownerId, batch, error);
+          return;
+        }
         const retryable = isRetryable(error);
         const delay = retryDelay(rows[0]!.attempts, error);
         for (const row of batch) {
@@ -179,9 +258,37 @@ export class SyncClient {
         generation !== this.generation
       )
         throw error;
-      const refreshed = await this.access(true);
-      if (!refreshed || this.stopped || generation !== this.generation) throw error;
+      let refreshed: string | null;
+      try {
+        refreshed = await this.access(true);
+      } catch (refreshError) {
+        throw new SyncAuthenticationUnavailableError(
+          refreshError instanceof Error ? refreshError.message : 'Identity session refresh failed.',
+        );
+      }
+      if (!refreshed) throw new SyncAuthenticationUnavailableError();
+      if (this.stopped || generation !== this.generation) throw error;
       return this.transport.push(refreshed, request);
+    }
+  }
+
+  private async deferBatchForAuthentication(
+    ownerId: string,
+    rows: LocalOperation[],
+    error: unknown,
+  ): Promise<void> {
+    for (const row of rows) {
+      if (!row.claimToken || this.stopped) return;
+      await this.store.retry(
+        ownerId,
+        row.id,
+        row.claimToken,
+        this.now() + STORE_RECOVERY_DELAY_MS,
+        false,
+        'AUTH_UNAVAILABLE',
+        error instanceof Error ? error.message : 'Identity session is unavailable.',
+        false,
+      );
     }
   }
   private async applyResults(
@@ -204,7 +311,7 @@ export class SyncClient {
           row.id,
           row.claimToken,
           this.now() + retryDelay(row.attempts),
-          result?.retryable === false || row.attempts >= 7,
+          result?.retryable === false || row.attempts >= 8,
           result?.code ?? (result ? undefined : 'MISSING_SYNC_RESULT'),
           result?.code,
         );
@@ -285,5 +392,5 @@ function isRetryable(error: unknown): boolean {
 function retryDelay(attempts: number, error?: unknown): number {
   if (error instanceof SyncTransportError && error.retryAfterMs !== undefined)
     return error.retryAfterMs;
-  return Math.min(300_000, 1_000 * 2 ** Math.min(attempts, 8));
+  return Math.min(300_000, 1_000 * 2 ** Math.min(Math.max(attempts - 1, 0), 8));
 }

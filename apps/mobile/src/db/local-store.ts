@@ -26,6 +26,16 @@ export interface LocalOperation {
   failureMessage?: string;
 }
 
+export interface LocalConflictSummary {
+  operationId: string;
+  deviceId: string;
+  entityKey: string;
+  expectedVersion?: number;
+  description?: string;
+  amountMinor?: string;
+  currency?: string;
+}
+
 export class LocalStore {
   private readonly changeListeners = new Set<() => void>();
   constructor(private readonly db: SqliteDatabase) {}
@@ -145,7 +155,7 @@ export class LocalStore {
         ownerId,
       );
       if (update.changes) {
-        claimed.push({ ...row, dependencies, claimToken });
+        claimed.push({ ...row, attempts: row.attempts + 1, dependencies, claimToken });
       }
     }
     return claimed;
@@ -234,10 +244,13 @@ export class LocalStore {
     terminal: boolean,
     failureCode?: string,
     failureMessage?: string,
+    consumeAttempt = true,
   ): Promise<void> {
     await this.db.runAsync(
-      "UPDATE sync_operations SET state = CASE WHEN ? = 1 OR attempts >= 8 THEN 'terminal' ELSE 'pending' END, retry_at = ?, lease_until = NULL, claim_token = NULL, failure_code = ?, last_error = ? WHERE id = ? AND owner_id = ? AND state = 'sending' AND claim_token = ?",
+      "UPDATE sync_operations SET state = CASE WHEN ? = 1 OR (? = 1 AND attempts >= 8) THEN 'terminal' ELSE 'pending' END, attempts = CASE WHEN ? = 1 THEN attempts ELSE MAX(attempts - 1, 0) END, retry_at = ?, lease_until = NULL, claim_token = NULL, failure_code = ?, last_error = ? WHERE id = ? AND owner_id = ? AND state = 'sending' AND claim_token = ?",
       terminal ? 1 : 0,
+      consumeAttempt ? 1 : 0,
+      consumeAttempt ? 1 : 0,
       retryAt,
       failureCode ?? null,
       failureMessage ?? null,
@@ -258,6 +271,14 @@ export class LocalStore {
     this.notifyChanged();
   }
 
+  async listConflicts(ownerId: string): Promise<LocalConflictSummary[]> {
+    const rows = await this.db.getAllAsync<{ id: string; device_id: string; payload: string }>(
+      "SELECT id, device_id, payload FROM sync_operations WHERE owner_id = ? AND state = 'conflict' ORDER BY queue_sequence",
+      ownerId,
+    );
+    return rows.map((row) => summarizeConflict(row.id, row.device_id, row.payload));
+  }
+
   /** Explicitly abandons a resolved conflict, then reconciles deferred remote state. */
   async resolveConflict(ownerId: string, id: string): Promise<void> {
     await this.db.withTransactionAsync(async () => {
@@ -267,6 +288,12 @@ export class LocalStore {
         id,
       );
       if (!rows[0]) return;
+      // The user explicitly chose the server version, so local dependents may proceed.
+      await this.db.runAsync(
+        'INSERT OR IGNORE INTO sync_completed_operations (owner_id, id) VALUES (?, ?)',
+        ownerId,
+        id,
+      );
       await this.db.runAsync(
         "DELETE FROM sync_operations WHERE owner_id = ? AND id = ? AND state = 'conflict'",
         ownerId,
@@ -324,6 +351,68 @@ export class LocalStore {
     }
   }
 
+  async entities(
+    ownerId: string,
+    prefix: string,
+  ): Promise<Array<{ entityId: string; value: unknown }>> {
+    const rows = await this.db.getAllAsync<{ entityId: string; value: string }>(
+      'SELECT entity_id AS entityId, value FROM local_entities WHERE owner_id = ? AND substr(entity_id, 1, length(?)) = ? ORDER BY entity_id',
+      ownerId,
+      prefix,
+      prefix,
+    );
+    return rows.flatMap((row) => {
+      try {
+        return [{ entityId: row.entityId, value: JSON.parse(row.value) as unknown }];
+      } catch {
+        return [];
+      }
+    });
+  }
+
+  /** Caches server data without replacing local writes that have not settled. */
+  async cacheEntity(ownerId: string, entityKey: string, value: unknown): Promise<boolean> {
+    let cached = false;
+    await this.db.withTransactionAsync(async () => {
+      const operations = await this.db.getAllAsync<{ payload: string }>(
+        "SELECT payload FROM sync_operations WHERE owner_id = ? AND state IN ('pending', 'sending', 'conflict', 'quarantined', 'terminal')",
+        ownerId,
+      );
+      for (const row of operations) {
+        try {
+          if (canonicalEntityKey(JSON.parse(row.payload) as SyncOperation) === entityKey) return;
+        } catch {
+          continue;
+        }
+      }
+      const current = await this.entity(ownerId, entityKey);
+      if (current !== undefined && entityVersion(current) > entityVersion(value)) return;
+      await this.db.runAsync(
+        'INSERT INTO local_entities (owner_id, entity_id, value) VALUES (?, ?, ?) ON CONFLICT(owner_id, entity_id) DO UPDATE SET value = excluded.value',
+        ownerId,
+        entityKey,
+        JSON.stringify(value),
+      );
+      cached = true;
+    });
+    if (cached) this.notifyChanged();
+    return cached;
+  }
+
+  async hasUnresolvedMutation(ownerId: string, entityKey: string): Promise<boolean> {
+    const operations = await this.db.getAllAsync<{ payload: string }>(
+      "SELECT payload FROM sync_operations WHERE owner_id = ? AND state IN ('pending', 'sending', 'conflict', 'quarantined', 'terminal')",
+      ownerId,
+    );
+    return operations.some((row) => {
+      try {
+        return canonicalEntityKey(JSON.parse(row.payload) as SyncOperation) === entityKey;
+      } catch {
+        return false;
+      }
+    });
+  }
+
   async deferredEventIds(ownerId: string, deviceId: string): Promise<string[]> {
     const rows = await this.db.getAllAsync<{ event_id: string }>(
       'SELECT event_id FROM sync_deferred_events WHERE owner_id = ? AND device_id = ? ORDER BY event_id',
@@ -360,6 +449,14 @@ export class LocalStore {
   async quarantine(ownerId: string): Promise<void> {
     await this.db.runAsync(
       "UPDATE sync_operations SET state = 'quarantined', lease_until = NULL, claim_token = NULL WHERE owner_id = ? AND state IN ('pending', 'sending')",
+      ownerId,
+    );
+    this.notifyChanged();
+  }
+
+  async restoreQuarantined(ownerId: string): Promise<void> {
+    await this.db.runAsync(
+      "UPDATE sync_operations SET state = CASE WHEN attempts >= 8 THEN 'terminal' ELSE 'pending' END, retry_at = 0, lease_until = NULL, claim_token = NULL, failure_code = NULL, last_error = NULL WHERE owner_id = ? AND state = 'quarantined'",
       ownerId,
     );
     this.notifyChanged();
@@ -537,6 +634,53 @@ export function canonicalEntityKey(operation: SyncOperation): string {
   }
   if (operation.entity.includes(':')) return operation.entity;
   return `${operation.entity}:${operation.entityId ?? operation.id}`;
+}
+
+function summarizeConflict(
+  operationId: string,
+  deviceId: string,
+  serialized: string,
+): LocalConflictSummary {
+  try {
+    const value: unknown = JSON.parse(serialized);
+    if (!isSyncOperation(value))
+      return { operationId, deviceId, entityKey: `unknown:${operationId}` };
+    return {
+      operationId,
+      deviceId,
+      entityKey: canonicalEntityKey(value),
+      ...(isEntityVersion(value.expectedVersion) ? { expectedVersion: value.expectedVersion } : {}),
+      ...(typeof value.payload.description === 'string'
+        ? { description: value.payload.description }
+        : {}),
+      ...(typeof value.payload.amountMinor === 'string'
+        ? { amountMinor: value.payload.amountMinor }
+        : {}),
+      ...(typeof value.payload.currency === 'string' ? { currency: value.payload.currency } : {}),
+    };
+  } catch {
+    return { operationId, deviceId, entityKey: `unknown:${operationId}` };
+  }
+}
+
+function isSyncOperation(value: unknown): value is SyncOperation {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    'entity' in value &&
+    typeof value.entity === 'string' &&
+    'expectedVersion' in value &&
+    isEntityVersion(value.expectedVersion) &&
+    'payload' in value &&
+    typeof value.payload === 'object' &&
+    value.payload !== null &&
+    !Array.isArray(value.payload) &&
+    'createdAt' in value &&
+    typeof value.createdAt === 'string'
+  );
 }
 
 function isExpenseEvent(event: DomainEvent): boolean {

@@ -81,6 +81,83 @@ async function withStore(
 }
 
 describe('LocalStore and SyncClient', () => {
+  it('persists group/expense cache per owner without overwriting an unresolved local edit', async () => {
+    await withStore(async (store) => {
+      await store.cacheEntity('owner-a', 'group:group-1', {
+        id: 'group-1',
+        name: 'Trip',
+        members: [{ userId: 'owner-a', role: 'admin' }],
+      });
+      await store.cacheEntity('owner-a', 'expense:expense-1', {
+        id: 'expense-1',
+        version: 1,
+        description: 'Server copy',
+        amountMinor: '100',
+        currency: 'VND',
+      });
+      expect(await store.entities('owner-a', 'group:')).toHaveLength(1);
+      expect(await store.entities('owner-b', 'group:')).toEqual([]);
+
+      await store.mutate('owner-a', 'device-a', {
+        id: '00000000-0000-4000-8000-000000000001',
+        entity: 'expense',
+        entityId: 'expense-1',
+        expectedVersion: 1,
+        payload: {
+          expenseId: 'expense-1',
+          version: 1,
+          description: 'Local pending edit',
+          amountMinor: '100',
+          currency: 'VND',
+        },
+        createdAt: '2026-01-01T00:00:00.000Z',
+      });
+
+      expect(await store.hasUnresolvedMutation('owner-a', 'expense:expense-1')).toBe(true);
+      expect(
+        await store.cacheEntity('owner-a', 'expense:expense-1', {
+          id: 'expense-1',
+          version: 2,
+          description: 'Newer server copy',
+          amountMinor: '200',
+          currency: 'VND',
+        }),
+      ).toBe(false);
+      expect(await store.entity('owner-a', 'expense:expense-1')).toMatchObject({
+        description: 'Local pending edit',
+      });
+    });
+  });
+
+  it('restores cached groups and expenses after reopening the SQLite database', async () => {
+    const path = join(tmpdir(), `equa-mobile-cache-${crypto.randomUUID()}.sqlite`);
+    let db = new DiskSqlite(path);
+    try {
+      const store = new LocalStore(db);
+      await store.initialize();
+      await store.cacheEntity('owner', 'group:group-1', { id: 'group-1', name: 'Trip' });
+      await store.cacheEntity('owner', 'expense:expense-1', {
+        id: 'expense-1',
+        version: 2,
+        description: 'Cached dinner',
+        amountMinor: '500',
+        currency: 'VND',
+      });
+      db.close();
+      db = new DiskSqlite(path);
+      const reopened = new LocalStore(db);
+      await reopened.initialize();
+      expect(await reopened.entity('owner', 'group:group-1')).toMatchObject({ name: 'Trip' });
+      expect(await reopened.entity('owner', 'expense:expense-1')).toMatchObject({
+        description: 'Cached dinner',
+        version: 2,
+      });
+    } finally {
+      db.close();
+      await rm(path, { force: true });
+    }
+  });
+
   it('migrates a previous on-disk outbox schema without losing pending work', async () => {
     const path = join(tmpdir(), `equa-mobile-legacy-${crypto.randomUUID()}.sqlite`);
     const legacy = new DiskSqlite(path);
@@ -207,6 +284,78 @@ describe('LocalStore and SyncClient', () => {
     });
   });
 
+  it('defers a claimed operation without spending an attempt when token refresh is unavailable', async () => {
+    await withStore(async (store) => {
+      await store.mutate('owner', 'device', operation('auth-retry'));
+      const client = new SyncClient(
+        store,
+        { push: () => Promise.reject(new SyncTransportError(401)) },
+        (refresh) =>
+          refresh ? Promise.reject(new Error('Identity unavailable')) : Promise.resolve('expired'),
+        () => 0,
+      );
+
+      await client.flush('owner');
+      client.stop();
+      expect(await store.claim('owner', 20, 29_999)).toHaveLength(0);
+      const due = await store.claim('owner', 20, 30_000);
+      expect(due).toHaveLength(1);
+      expect(due[0]?.attempts).toBe(1);
+    });
+  });
+
+  it('exposes a concise owner-scoped conflict summary and explicit server-wins resolution', async () => {
+    await withStore(async (store) => {
+      await store.mutate('owner', 'device', {
+        id: 'conflict-operation',
+        entity: 'expense',
+        entityId: 'expense-id',
+        expectedVersion: 3,
+        payload: { description: 'Lunch', amountMinor: '500', currency: 'VND' },
+        createdAt: '2026-01-01T00:00:00.000Z',
+      });
+      await store.mutate('owner', 'device', operation('dependent'), ['conflict-operation']);
+      const claimed = await store.claim('owner', 1, 0);
+      await store.conflict('owner', 'conflict-operation', claimed[0]!.claimToken!);
+
+      await expect(store.listConflicts('owner')).resolves.toEqual([
+        {
+          operationId: 'conflict-operation',
+          deviceId: 'device',
+          entityKey: 'expense:expense-id',
+          expectedVersion: 3,
+          description: 'Lunch',
+          amountMinor: '500',
+          currency: 'VND',
+        },
+      ]);
+      await expect(store.listConflicts('other-owner')).resolves.toEqual([]);
+
+      await store.resolveConflict('owner', 'conflict-operation');
+      await expect(store.listConflicts('owner')).resolves.toEqual([]);
+      await expect(store.claim('owner', 1, 0)).resolves.toMatchObject([
+        { id: 'dependent', state: 'pending' },
+      ]);
+    });
+  });
+
+  it('restores only the re-authenticated owner quarantine without losing operation attempts', async () => {
+    await withStore(async (store) => {
+      await store.mutate('owner-a', 'device-a', operation('owner-a-op'));
+      const claimed = await store.claim('owner-a', 1, 0);
+      await store.quarantine('owner-a');
+      await store.mutate('owner-b', 'device-b', operation('owner-b-op'));
+
+      await store.restoreQuarantined('owner-a');
+      const ownerA = await store.claim('owner-a', 1, 0);
+      const ownerB = await store.claim('owner-b', 1, 0);
+
+      expect(ownerA).toMatchObject([{ id: 'owner-a-op', ownerId: 'owner-a', attempts: 2 }]);
+      expect(ownerB).toMatchObject([{ id: 'owner-b-op', ownerId: 'owner-b', attempts: 1 }]);
+      expect(claimed[0]?.attempts).toBe(1);
+    });
+  });
+
   it('schedules retries after partial failures and wakes exactly at the retry deadline', async () => {
     vi.useFakeTimers();
     try {
@@ -266,6 +415,38 @@ describe('LocalStore and SyncClient', () => {
         await store.mutate('owner', 'device', operation('earlier'));
         await vi.advanceTimersByTimeAsync(0);
         expect(calls).toBe(1);
+        client.stop();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('recovers queue wake scheduling after a transient SQLite read failure', async () => {
+    vi.useFakeTimers();
+    try {
+      await withStore(async (store) => {
+        let pushes = 0;
+        await store.mutate('owner', 'device', operation('recover-wakeup'));
+        vi.spyOn(store, 'nextWakeAt').mockRejectedValueOnce(new Error('SQLite busy'));
+        const client = new SyncClient(
+          store,
+          {
+            push: () => {
+              pushes += 1;
+              return Promise.resolve([{ id: 'recover-wakeup', status: 'applied' }]);
+            },
+          },
+          () => Promise.resolve('token'),
+          () => 0,
+        );
+        client.start('owner');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(pushes).toBe(0);
+        await vi.advanceTimersByTimeAsync(29_999);
+        expect(pushes).toBe(0);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(pushes).toBe(1);
         client.stop();
       });
     } finally {

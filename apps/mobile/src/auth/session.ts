@@ -16,6 +16,7 @@ export interface SessionApi {
 export class SessionManager {
   private refreshPromise: { epoch: number; value: Promise<TokenPair> } | undefined;
   private generation = 0;
+  private refreshBlocked = false;
   private persistence: Promise<void> = Promise.resolve();
   constructor(private readonly api: SessionApi) {}
 
@@ -26,10 +27,8 @@ export class SessionManager {
    */
   begin(): number {
     const epoch = ++this.generation;
-    void this.enqueue(async () => {
-      await SecureStore.deleteItemAsync(accessKey);
-      await SecureStore.deleteItemAsync(refreshKey);
-    });
+    this.refreshBlocked = false;
+    void this.deleteStoredTokens().catch(() => undefined);
     return epoch;
   }
 
@@ -46,6 +45,7 @@ export class SessionManager {
       if (!this.isCurrent(epoch)) return;
       await SecureStore.setItemAsync(refreshKey, tokens.refreshToken);
       saved = this.isCurrent(epoch);
+      if (saved) this.refreshBlocked = false;
     });
     return saved;
   }
@@ -57,6 +57,7 @@ export class SessionManager {
     return (await this.refresh()).accessToken;
   }
   async refresh(): Promise<TokenPair> {
+    if (this.refreshBlocked) throw new Error('Session refresh was invalidated; sign in again.');
     const epoch = this.generation;
     if (!this.refreshPromise || this.refreshPromise.epoch !== epoch)
       this.refreshPromise = { epoch, value: this.rotate(epoch) };
@@ -69,19 +70,35 @@ export class SessionManager {
   }
   async clear(): Promise<void> {
     this.generation += 1;
+    this.refreshBlocked = true;
+    await this.deleteStoredTokens();
+  }
+  private async deleteStoredTokens(): Promise<void> {
     await this.enqueue(async () => {
       await SecureStore.deleteItemAsync(accessKey);
       await SecureStore.deleteItemAsync(refreshKey);
     });
   }
   private async rotate(generation: number): Promise<TokenPair> {
-    const refreshToken = await SecureStore.getItemAsync(refreshKey);
-    if (!refreshToken) throw new Error('No refresh token.');
-    const tokens = await this.api.refresh(refreshToken);
-    if (generation !== this.generation) throw new Error('Session changed while refreshing.');
-    if (!(await this.save(tokens, generation)))
-      throw new Error('Session changed while refreshing.');
-    return tokens;
+    try {
+      const refreshToken = await SecureStore.getItemAsync(refreshKey);
+      if (!refreshToken) throw new Error('No refresh token.');
+      const tokens = await this.api.refresh(refreshToken);
+      if (generation !== this.generation) throw new Error('Session changed while refreshing.');
+      if (!(await this.save(tokens, generation)))
+        throw new Error('Session changed while refreshing.');
+      return tokens;
+    } catch (error) {
+      if (generation === this.generation) {
+        this.refreshBlocked = true;
+        try {
+          await this.deleteStoredTokens();
+        } catch {
+          // Block another rotation in this session even if secure deletion fails.
+        }
+      }
+      throw error;
+    }
   }
 
   private async enqueue(task: () => Promise<void>): Promise<void> {

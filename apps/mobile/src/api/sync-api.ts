@@ -1,6 +1,8 @@
-import type { SyncRequest, SyncResult } from '@equa/contracts';
+import type { SyncConflictResolutionRequest, SyncRequest, SyncResult } from '@equa/contracts';
 
 import { SyncTransportError, type SyncTransport } from '../sync/sync-client';
+
+const SYNC_REQUEST_TIMEOUT_MS = 20_000;
 
 export function createSyncTransport(baseUrl: string): SyncTransport {
   return {
@@ -64,6 +66,14 @@ export function createSyncTransport(baseUrl: string): SyncTransport {
         events: body.events,
       };
     },
+    async resolveConflict(accessToken: string, request: SyncConflictResolutionRequest) {
+      await requestJson(
+        `${baseUrl}/sync/conflicts/${encodeURIComponent(request.operationId)}/resolve`,
+        accessToken,
+        'POST',
+        request,
+      );
+    },
   };
 }
 
@@ -74,6 +84,9 @@ async function requestJson(
   body?: unknown,
 ): Promise<{ status: number; body: unknown }> {
   let response: Response;
+  let text: string;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SYNC_REQUEST_TIMEOUT_MS);
   try {
     response = await fetch(url, {
       method,
@@ -84,11 +97,14 @@ async function requestJson(
         'X-Equa-Client': 'mobile',
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      signal: controller.signal,
     });
+    text = await response.text();
   } catch {
     throw new SyncTransportError(undefined, undefined, undefined, true);
+  } finally {
+    clearTimeout(timeout);
   }
-  const text = await response.text();
   let parsed: unknown;
   try {
     parsed = text ? (JSON.parse(text) as unknown) : undefined;

@@ -31,7 +31,7 @@ describe('mobile authentication and session persistence', () => {
   });
 
   it('sends the Identity mobile client header on actual login and refresh requests', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(() =>
       Promise.resolve(
         new Response(JSON.stringify(tokens('access', 'refresh')), {
           status: 200,
@@ -52,6 +52,8 @@ describe('mobile authentication and session persistence', () => {
           body: JSON.stringify({ email: 'one@example.test', password: 'password' }),
         }),
       );
+      expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+      expect(fetchMock.mock.calls[1]?.[1]?.signal).toBeInstanceOf(AbortSignal);
       expect(fetchMock).toHaveBeenNthCalledWith(
         2,
         'https://identity.test/v1/auth/refresh',
@@ -63,6 +65,47 @@ describe('mobile authentication and session persistence', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('aborts a stalled Identity refresh so sync can recover instead of hanging', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.fn<typeof fetch>().mockImplementation(
+        (_input, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('aborted', 'AbortError')),
+            );
+          }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const api = createMobileAuthApi('https://identity.test/v1');
+      const request = api.refresh('refresh');
+      const timeoutExpectation = expect(request).rejects.toThrow('Identity request timed out.');
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      await timeoutExpectation;
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('invalidates an ambiguous refresh token and never replays the same rotation request', async () => {
+    let calls = 0;
+    const session = new SessionManager({
+      refresh: () => {
+        calls += 1;
+        return Promise.reject(new Error('response lost after server rotation'));
+      },
+    });
+    const epoch = session.begin();
+    await session.save(tokens('access', 'refresh'), epoch);
+
+    await expect(session.refresh()).rejects.toThrow('response lost after server rotation');
+    expect(await session.accessToken()).toBeNull();
+    await expect(session.refresh()).rejects.toThrow('Session refresh was invalidated');
+    expect(calls).toBe(1);
   });
 
   it('does not leave a stale token after logout starts while persistence is pending', async () => {

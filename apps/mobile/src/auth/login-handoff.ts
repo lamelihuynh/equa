@@ -8,7 +8,7 @@ export interface LoginHandoffInput<TStore, TClient> {
   session: SessionEpochGuard;
   epoch: number;
   accessToken: string;
-  openStore(): Promise<TStore>;
+  openStore(ownerId: string): Promise<TStore>;
   createClient(store: TStore): TClient;
   stopSync(): void;
   setSync(client: TClient): void;
@@ -24,7 +24,7 @@ export async function finishLoginHandoff<TStore, TClient>(
   if (!input.session.isCurrent(input.epoch)) return false;
   const ownerId = accountHint(input.accessToken) ?? null;
   if (ownerId) {
-    const store = await input.openStore();
+    const store = await input.openStore(ownerId);
     if (!input.session.isCurrent(input.epoch)) return false;
     input.stopSync();
     const client = input.createClient(store);

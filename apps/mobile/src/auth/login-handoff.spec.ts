@@ -64,6 +64,28 @@ function runDelayedHandoff(currentEpoch: { value: number }): {
 }
 
 describe('finishLoginHandoff', () => {
+  it('passes the authenticated owner id to the store recovery step', async () => {
+    const openedOwners: string[] = [];
+    const result = await finishLoginHandoff({
+      session: { isCurrent: () => true },
+      epoch: 1,
+      accessToken: accessToken('account-one'),
+      openStore: (ownerId) => {
+        openedOwners.push(ownerId);
+        return Promise.resolve('store');
+      },
+      createClient: (store) => `sync:${store}`,
+      stopSync: () => undefined,
+      setSync: () => undefined,
+      startSync: () => undefined,
+      setOwner: () => undefined,
+      setAuthenticated: () => undefined,
+    });
+
+    expect(result).toBe(true);
+    expect(openedOwners).toEqual(['account-one']);
+  });
+
   it('does not restore session UI or start sync when logout occurs while opening SQLite', async () => {
     const currentEpoch = { value: 1 };
     const { opened, effects, task } = runDelayedHandoff(currentEpoch);

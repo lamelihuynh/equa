@@ -6,6 +6,8 @@ interface IdentityResponse {
   refreshToken?: string;
 }
 
+const AUTH_REQUEST_TIMEOUT_MS = 15_000;
+
 export interface MobileAuthApi extends SessionApi {
   login(email: string, password: string): Promise<TokenPair>;
 }
@@ -13,15 +15,28 @@ export interface MobileAuthApi extends SessionApi {
 /** Identity only includes a refresh token in its JSON response for this client. */
 export function createMobileAuthApi(baseUrl: string): MobileAuthApi {
   const requestTokens = async (path: string, body: Record<string, string>): Promise<TokenPair> => {
-    const response = await fetch(`${baseUrl}/auth/${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Equa-Client': 'mobile',
-      },
-      body: JSON.stringify(body),
-    });
-    const value: unknown = await response.json();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
+    let response: Response;
+    let value: unknown;
+    try {
+      response = await fetch(`${baseUrl}/auth/${path}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Equa-Client': 'mobile',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      value = await response.json();
+    } catch (error) {
+      if (controller.signal.aborted)
+        throw new Error('Identity request timed out.', { cause: error });
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!response.ok || !isIdentityResponse(value) || !value.accessToken || !value.refreshToken)
       throw new Error(
         value && isIdentityResponse(value)

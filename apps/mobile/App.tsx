@@ -20,8 +20,9 @@ import type { SupportedCurrency, SupportedLanguage } from '@equa/contracts';
 import { createMobileAuthApi } from './src/auth/auth-api';
 import { finishLoginHandoff } from './src/auth/login-handoff';
 import { accountHint, SessionManager } from './src/auth/session';
-import { LocalStore } from './src/db/local-store';
+import { LocalStore, type LocalConflictSummary } from './src/db/local-store';
 import { createSyncTransport } from './src/api/sync-api';
+import { OfflineDataPanel } from './src/sync/offline-data-panel';
 import { createExpoConnectivity } from './src/sync/expo-connectivity';
 import { SyncClient } from './src/sync/sync-client';
 
@@ -83,6 +84,8 @@ export default function App() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [syncOwner, setSyncOwner] = useState<string | null>(null);
+  const [syncConflicts, setSyncConflicts] = useState<LocalConflictSummary[]>([]);
 
   // Form state
   const [formDisplayName, setFormDisplayName] = useState('');
@@ -92,6 +95,7 @@ export default function App() {
   const [formTimezone, setFormTimezone] = useState('Asia/Ho_Chi_Minh');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const syncRef = useRef<SyncClient | null>(null);
+  const localStoreRef = useRef<LocalStore | null>(null);
   const ownerRef = useRef<string | null>(null);
   const sessionRef = useRef<SessionManager | null>(null);
 
@@ -104,12 +108,17 @@ export default function App() {
     void SecureStore.getItemAsync(accessTokenKey).then(async (token) => {
       if (!sessionRef.current?.isCurrent(epoch)) return;
       ownerRef.current = token ? (accountHint(token) ?? null) : null;
+      setSyncOwner(ownerRef.current);
       if (token && ownerRef.current) {
         const store = await LocalStore.open();
+        if (!sessionRef.current?.isCurrent(epoch)) return;
+        localStoreRef.current = store;
+        await store.restoreQuarantined(ownerRef.current);
+        if (!sessionRef.current?.isCurrent(epoch)) return;
         syncRef.current = new SyncClient(
           store,
           createSyncTransport(apiBaseUrl),
-          (refresh) => sessionRef.current!.token(refresh),
+          (refresh) => syncToken(refresh),
           undefined,
           connectivity,
         );
@@ -125,6 +134,29 @@ export default function App() {
     });
     return () => subscription.remove();
   }, []);
+
+  useEffect(() => {
+    const client = syncRef.current;
+    if (!authenticated || !syncOwner || !client) {
+      setSyncConflicts([]);
+      return;
+    }
+    let active = true;
+    const refreshConflicts = (): void => {
+      void client
+        .conflictSummaries(syncOwner)
+        .then((items) => {
+          if (active) setSyncConflicts(items);
+        })
+        .catch(() => undefined);
+    };
+    refreshConflicts();
+    const unsubscribe = client.subscribe(refreshConflicts);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [authenticated, syncOwner]);
 
   // Fetch profile when authenticated
   useEffect(() => {
@@ -288,23 +320,84 @@ export default function App() {
     const ownerId = ownerRef.current;
     const clearSession = sessionRef.current?.clear();
     ownerRef.current = null;
+    localStoreRef.current = null;
+    setSyncOwner(null);
+    setSyncConflicts([]);
     syncRef.current?.stop();
-    if (ownerId) {
-      const store = await LocalStore.open();
-      await store.quarantine(ownerId);
+    let warning = '';
+    try {
+      if (ownerId) {
+        const store = await LocalStore.open();
+        await store.quarantine(ownerId);
+      }
+    } catch {
+      warning =
+        'Hàng đợi vẫn được giữ cục bộ; hãy đăng nhập lại cùng tài khoản để tiếp tục đồng bộ.';
     }
-    await clearSession;
+    try {
+      await clearSession;
+    } catch {
+      warning =
+        'Không thể xóa an toàn thông tin phiên. Hãy thử đăng xuất lại khi thiết bị ổn định.';
+    }
     setPassword('');
     setProfile(null);
     setAvatarUrl(null);
-    setMessage('');
+    setMessage(warning);
     setAuthenticated(false);
+  }
+
+  async function syncToken(refresh = false): Promise<string | null> {
+    const session = sessionRef.current;
+    if (!session) return null;
+    try {
+      return await session.token(refresh);
+    } catch (error) {
+      if (refresh && ownerRef.current) {
+        await logout();
+        setMessage(
+          'Phiên đăng nhập cần được xác thực lại. Hàng đợi cục bộ được giữ riêng theo tài khoản.',
+        );
+      }
+      throw error;
+    }
+  }
+
+  function confirmUseServerVersion(conflict: LocalConflictSummary): void {
+    Alert.alert(
+      'Xung đột phiên bản',
+      `Bỏ sửa cục bộ cho ${conflict.description ?? conflict.entityKey} và dùng dữ liệu mới nhất từ máy chủ?`,
+      [
+        { text: 'Giữ để xem lại', style: 'cancel' },
+        {
+          text: 'Dùng dữ liệu máy chủ',
+          style: 'destructive',
+          onPress: () => {
+            void resolveConflict(conflict);
+          },
+        },
+      ],
+    );
+  }
+
+  async function resolveConflict(conflict: LocalConflictSummary): Promise<void> {
+    const ownerId = ownerRef.current;
+    const client = syncRef.current;
+    if (!ownerId || !client) return;
+    try {
+      await client.resolveConflict(ownerId, conflict);
+      setMessage('Đã bỏ bản sửa cục bộ. Phiên bản máy chủ sẽ được đồng bộ lại.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Không thể giải quyết xung đột.');
+    }
   }
 
   const submit = async () => {
     const sessionEpoch = mode === 'login' ? sessionRef.current?.begin() : undefined;
     if (mode === 'login') {
       ownerRef.current = null;
+      setSyncOwner(null);
+      setSyncConflicts([]);
       syncRef.current?.stop();
       setAuthenticated(false);
     }
@@ -331,12 +424,19 @@ export default function App() {
           session: sessionRef.current,
           epoch: sessionEpoch,
           accessToken: tokens.accessToken,
-          openStore: () => LocalStore.open(),
+          openStore: async (ownerId) => {
+            const store = await LocalStore.open();
+            if (sessionRef.current?.isCurrent(sessionEpoch)) {
+              localStoreRef.current = store;
+              await store.restoreQuarantined(ownerId);
+            }
+            return store;
+          },
           createClient: (store) =>
             new SyncClient(
               store,
               createSyncTransport(apiBaseUrl),
-              (refresh) => sessionRef.current!.token(refresh),
+              (refresh) => syncToken(refresh),
               undefined,
               connectivity,
             ),
@@ -347,6 +447,7 @@ export default function App() {
           startSync: (client, ownerId) => client.start(ownerId),
           setOwner: (ownerId) => {
             ownerRef.current = ownerId;
+            setSyncOwner(ownerId);
           },
           setAuthenticated,
         });
@@ -408,6 +509,44 @@ export default function App() {
       >
         <Text style={styles.eyebrow}>EQUA · HỒ SƠ</Text>
         <Text style={styles.title}>Thiết lập Equa.</Text>
+
+        {syncConflicts.length > 0 && (
+          <View style={styles.syncConflictCard}>
+            <Text style={styles.syncConflictTitle}>
+              Cần xem lại {syncConflicts.length} xung đột đồng bộ
+            </Text>
+            <Text style={styles.syncConflictHint}>
+              Bản sửa trên thiết bị vẫn được giữ. Chọn dùng dữ liệu máy chủ để bỏ bản sửa cục bộ.
+            </Text>
+            {syncConflicts.map((conflict) => (
+              <View style={styles.syncConflictRow} key={conflict.operationId}>
+                <View style={styles.syncConflictCopy}>
+                  <Text style={styles.syncConflictName}>{conflict.description ?? 'Khoản chi'}</Text>
+                  <Text style={styles.syncConflictMeta}>
+                    {conflict.entityKey} · phiên bản gửi {conflict.expectedVersion ?? 'không rõ'}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  style={styles.syncConflictButton}
+                  onPress={() => confirmUseServerVersion(conflict)}
+                >
+                  <Text style={styles.syncConflictButtonText}>Dùng máy chủ</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {syncOwner && (
+          <OfflineDataPanel
+            ownerId={syncOwner}
+            apiBaseUrl={apiBaseUrl}
+            store={localStoreRef.current}
+            sync={syncRef.current}
+            accessToken={(refresh) => syncToken(refresh)}
+          />
+        )}
 
         {/* Avatar */}
         <Pressable
@@ -642,6 +781,35 @@ const styles = StyleSheet.create({
     lineHeight: 42,
     marginBottom: 24,
   },
+  syncConflictCard: {
+    marginBottom: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#D9A35E',
+    borderRadius: 16,
+    backgroundColor: '#FFF3DF',
+  },
+  syncConflictTitle: { color: '#49382F', fontSize: 16, fontWeight: '800' },
+  syncConflictHint: { marginTop: 6, color: '#776A60', fontSize: 12, lineHeight: 18 },
+  syncConflictRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E8D2B4',
+  },
+  syncConflictCopy: { flex: 1 },
+  syncConflictName: { color: '#241917', fontSize: 13, fontWeight: '700' },
+  syncConflictMeta: { marginTop: 3, color: '#776A60', fontSize: 10 },
+  syncConflictButton: {
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: '#A34D3D',
+  },
+  syncConflictButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
   tabs: {
     flexDirection: 'row',
     gap: 6,
