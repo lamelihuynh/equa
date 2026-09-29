@@ -1,23 +1,25 @@
 # Triển khai staging
 
-`develop` là nhánh staging. Vercel được kết nối với repository và cấu hình `develop` là nhánh staging;
-biến môi trường `NEXT_PUBLIC_API_BASE_URL` trỏ đến URL Kong/API công khai của staging. Render chạy
-Identity từ image GHCR bất biến được build bởi `deploy-staging.yml`.
+Workflow staging chọn nhánh theo GitHub Environment variable `STAGING_BRANCH`, mặc định là
+`develop`. Trong `.github/components.json`, hiện chỉ Identity có deploy hook và HTTP smoke check;
+Social, Ledger, Automation & Sync, Platform, Notification và Web chưa có staging target trong repo.
 
-Cấu hình bắt buộc của GitHub Environment `staging`:
+GitHub Environment `staging` cần:
 
 - Secret `RENDER_IDENTITY_DEPLOY_HOOK`
 - Variable `STAGING_API_BASE_URL`
 
-Runtime secret bắt buộc trên Render: `IDENTITY_DATABASE_URL`, `IDENTITY_JWT_SECRET`,
-`RESEND_API_KEY`, `EMAIL_FROM`, `APP_WEB_URL` và các giá trị Redis/MinIO riêng cho dịch vụ. Không đưa
-bất kỳ giá trị nào trong số này vào repository.
+Render nhận image Identity bất biến được workflow build cho commit đang deploy. Runtime config cần
+được cấu hình riêng trong Render, gồm `IDENTITY_DATABASE_URL`, `IDENTITY_JWT_SECRET`, email provider
+settings và S3-compatible avatar settings. Không đưa giá trị thật vào repository.
 
-Trên Vercel staging, đặt `NEXT_PUBLIC_AVATAR_ORIGIN` bằng origin HTTPS công khai của MinIO/S3 staging.
-Web chỉ render avatar từ origin này, dù URL đọc object được Identity ký có thời hạn.
+Vercel/Web staging nếu đang được cấu hình thì là target ngoài workflow và component manifest này;
+repo hiện không xác nhận được project, branch, hay biến môi trường đó. Khi Web được thêm vào manifest,
+cần ghi rõ URL và smoke check tương ứng.
 
-Render cấp biến `PORT` cho Web Service; Identity ưu tiên lắng nghe biến này. Không đặt URL local hoặc
-`host.docker.internal` vào bất kỳ biến môi trường staging nào.
+Nếu Web staging chạy riêng, `NEXT_PUBLIC_AVATAR_ORIGIN` phải là origin HTTPS công khai của MinIO/S3
+staging. Render cấp biến `PORT` cho Identity service; service ưu tiên lắng nghe biến này. Không đặt
+URL local hoặc `host.docker.internal` vào biến môi trường staging.
 
 Mailpit chỉ dùng local. Staging dùng `EMAIL_PROVIDER=resend`; cần xác thực domain gửi mail trước khi
 gửi email xác minh/đặt lại thật đến người nhận bất kỳ.
