@@ -9,10 +9,12 @@ export class PostgresNotificationStore implements NotificationStore {
   constructor(connectionString: string) {
     this.pool = new Pool({ connectionString, max: 10 });
   }
-  async persistInboxAndJob(
+  async persistInboxAndJobs(
     event: DomainEvent,
-    job: NotificationJob,
+    jobs: readonly NotificationJob[],
   ): Promise<'inserted' | 'duplicate'> {
+    if (jobs.some((job) => job.eventId !== event.id))
+      throw new Error('Notification job event id does not match inbox event.');
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -24,17 +26,11 @@ export class PostgresNotificationStore implements NotificationStore {
         await client.query('COMMIT');
         return 'duplicate';
       }
-      await client.query(
-        "INSERT INTO notification_jobs (delivery_id, event_id, owner_id, type, payload, status, provider_id) VALUES ($1, $2, $3, $4, $5, 'pending', $6)",
-        [
-          job.deliveryId,
-          job.eventId,
-          job.ownerId,
-          job.type,
-          job.payload,
-          `notification:${job.eventId}`,
-        ],
-      );
+      for (const job of jobs)
+        await client.query(
+          "INSERT INTO notification_jobs (delivery_id, event_id, owner_id, type, payload, status, provider_id) VALUES ($1, $2, $3, $4, $5, 'pending', $6)",
+          [job.deliveryId, job.eventId, job.ownerId, job.type, job.payload, job.deliveryId],
+        );
       await client.query('COMMIT');
       return 'inserted';
     } catch (error) {

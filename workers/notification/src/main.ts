@@ -1,9 +1,14 @@
 import type { ServiceName } from '@equa/contracts';
+import { join } from 'node:path';
+import { config as loadEnv } from 'dotenv';
 
 import { InMemoryNotificationStore } from './in-memory.store.js';
 import { PostgresNotificationStore } from './database/postgres.store.js';
 import { DisabledNotificationProvider, NotificationWorker } from './notification.worker.js';
 import { consumeRabbit } from './rabbit.consumer.js';
+
+if (process.env.NODE_ENV !== 'test')
+  loadEnv({ path: join(process.cwd(), '../../.env'), quiet: true });
 
 const service: ServiceName = 'notification';
 
@@ -11,9 +16,40 @@ const databaseUrl = process.env.NOTIFICATION_DATABASE_URL;
 const store = databaseUrl
   ? new PostgresNotificationStore(databaseUrl)
   : new InMemoryNotificationStore();
-const worker = new NotificationWorker(store, new DisabledNotificationProvider());
+const reportWorkerFailure = (stage: 'ingest' | 'poll'): void => {
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      service,
+      component: 'notification-worker',
+      stage,
+      message: 'Background notification operation failed; recovery or DLQ handling will continue.',
+    }),
+  );
+};
+const reportRabbitFailure = (notice: {
+  reason: 'connect' | 'connection' | 'message';
+  attempt: number;
+  delayMs: number;
+}): void => {
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      service,
+      component: 'rabbit-consumer',
+      message: 'RabbitMQ consumer will retry.',
+      ...notice,
+    }),
+  );
+};
+const worker = new NotificationWorker(
+  store,
+  new DisabledNotificationProvider(),
+  undefined,
+  reportWorkerFailure,
+);
 const stopPolling = worker.start();
-console.log(
+console.info(
   JSON.stringify({
     level: 'info',
     message: databaseUrl
@@ -24,13 +60,16 @@ console.log(
 );
 const rabbit =
   databaseUrl && process.env.RABBITMQ_URL
-    ? consumeRabbit(process.env.RABBITMQ_URL, worker)
+    ? consumeRabbit(process.env.RABBITMQ_URL, worker, 1_000, undefined, reportRabbitFailure)
     : undefined;
 
 const shutdown = (signal: string): void => {
   stopPolling();
-  console.log(JSON.stringify({ level: 'info', message: 'worker stopping', service, signal }));
-  void rabbit?.close().finally(() => process.exit(0));
+  console.info(JSON.stringify({ level: 'info', message: 'worker stopping', service, signal }));
+  void rabbit
+    ?.close()
+    .catch(() => undefined)
+    .finally(() => process.exit(0));
 };
 
 process.on('SIGINT', () => shutdown('SIGINT'));

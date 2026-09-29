@@ -8,7 +8,10 @@ export interface ClaimedNotificationJob extends NotificationJob {
 }
 
 export interface NotificationStore {
-  persistInboxAndJob(event: DomainEvent, job: NotificationJob): Promise<'inserted' | 'duplicate'>;
+  persistInboxAndJobs(
+    event: DomainEvent,
+    jobs: readonly NotificationJob[],
+  ): Promise<'inserted' | 'duplicate'>;
   claimDue(now: Date): Promise<ClaimedNotificationJob | undefined>;
   complete(deliveryId: string, leaseToken: string): Promise<void>;
   retry(
@@ -46,19 +49,15 @@ export class NotificationWorker {
     private readonly store: NotificationStore,
     private readonly provider: NotificationProvider,
     private readonly now: () => Date = () => new Date(),
-    private readonly reportRecoverableError: () => void = () => undefined,
+    private readonly reportRecoverableError: (stage: 'ingest' | 'poll') => void = () => undefined,
   ) {}
   async ingest(event: DomainEvent, message: RabbitMessage): Promise<void> {
     try {
-      await this.store.persistInboxAndJob(event, {
-        eventId: event.id,
-        deliveryId: `notification:${event.id}`,
-        ownerId: event.ownerId,
-        type: event.type,
-        payload: event.payload,
-      });
+      const jobs = notificationJobsFor(event);
+      await this.store.persistInboxAndJobs(event, jobs);
       message.ack();
     } catch {
+      this.reportSafely('ingest');
       message.nack(false);
     }
   }
@@ -67,7 +66,7 @@ export class NotificationWorker {
     const job = await this.store.claimDue(this.now());
     if (!job) return;
     try {
-      await this.provider.deliver(job, `notification:${job.eventId}`);
+      await this.provider.deliver(job, job.deliveryId);
       await this.store.complete(job.deliveryId, job.leaseToken);
     } catch (error) {
       const failure = failureDetails(error, job.attempts);
@@ -89,11 +88,7 @@ export class NotificationWorker {
       this.polling = true;
       void this.deliverOne()
         .catch(() => {
-          try {
-            this.reportRecoverableError();
-          } catch {
-            // Reporting must not break the worker's recovery loop.
-          }
+          this.reportSafely('poll');
         })
         .finally(() => {
           this.polling = false;
@@ -108,6 +103,60 @@ export class NotificationWorker {
     if (this.pollTimer) clearInterval(this.pollTimer);
     this.pollTimer = undefined;
   }
+
+  private reportSafely(stage: 'ingest' | 'poll'): void {
+    try {
+      this.reportRecoverableError(stage);
+    } catch {
+      // Reporting must not break the worker's recovery loop.
+    }
+  }
+}
+
+function notificationJobsFor(event: DomainEvent): NotificationJob[] {
+  if (event.type !== 'expense.created' && event.type !== 'expense.updated') return [];
+  const actorId = event.payload.actorId;
+  if (typeof actorId !== 'string') return [];
+
+  const declaredRecipients = event.payload.addedParticipantIds;
+  let recipientIds: string[];
+  if (Array.isArray(declaredRecipients)) {
+    if (!declaredRecipients.every(isUuid))
+      throw new Error('Expense event contains an invalid added participant id.');
+    recipientIds = declaredRecipients;
+  } else if (declaredRecipients !== undefined) {
+    throw new Error('Expense event addedParticipantIds must be an array.');
+  } else if (event.type === 'expense.created' && Array.isArray(event.payload.participants)) {
+    recipientIds = event.payload.participants.map((participant: unknown) => {
+      if (!isRecord(participant) || !isUuid(participant.userId))
+        throw new Error('Expense event contains an invalid participant.');
+      return participant.userId;
+    });
+  } else {
+    return [];
+  }
+
+  return [...new Set(recipientIds)]
+    .filter((recipientId) => recipientId !== actorId)
+    .sort()
+    .map((recipientId) => ({
+      eventId: event.id,
+      deliveryId: `notification:${event.id}:${recipientId}`,
+      ownerId: recipientId,
+      type: event.type,
+      payload: { ...event.payload, recipientUserId: recipientId },
+    }));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isUuid(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
 }
 
 /** Explicitly disabled until an authenticated provider contract is configured. */

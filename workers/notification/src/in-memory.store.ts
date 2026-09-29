@@ -14,15 +14,21 @@ export class InMemoryNotificationStore implements NotificationStore {
   private readonly inbox = new Set<string>();
   private readonly jobs = new Map<string, StoredJob>();
   claims = 0;
-  persistInboxAndJob(event: DomainEvent, job: NotificationJob): Promise<'inserted' | 'duplicate'> {
+  persistInboxAndJobs(
+    event: DomainEvent,
+    jobs: readonly NotificationJob[],
+  ): Promise<'inserted' | 'duplicate'> {
     if (this.inbox.has(event.id)) return Promise.resolve('duplicate');
+    if (jobs.some((job) => job.eventId !== event.id))
+      return Promise.reject(new Error('Notification job event id does not match inbox event.'));
     this.inbox.add(event.id);
-    this.jobs.set(job.deliveryId, {
-      ...job,
-      attempts: 0,
-      availableAt: new Date(0),
-      status: 'pending',
-    });
+    for (const job of jobs)
+      this.jobs.set(job.deliveryId, {
+        ...job,
+        attempts: 0,
+        availableAt: new Date(0),
+        status: 'pending',
+      });
     return Promise.resolve('inserted');
   }
   claimDue(now: Date): Promise<ClaimedNotificationJob | undefined> {

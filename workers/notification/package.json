@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "db:migrate": "tsx src/database/migrate.ts",
     "dev": "tsx watch src/main.ts",
     "lint": "eslint src",
     "start": "node dist/main.js",
