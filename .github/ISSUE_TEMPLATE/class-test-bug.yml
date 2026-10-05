@@ -1,0 +1,59 @@
+name: Equa class test bug
+description: Report a Web or Android issue from the Equa class test.
+title: '[Class Test] '
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Do not include passwords, access tokens, API keys, or private account data.
+        Add screenshots after submitting the issue and remove personal information first.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Web
+        - Android
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the actions that led to the issue.
+      placeholder: "1. Sign in\n2. Open Groups\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot or screen recording
+      description: Attach media after submitting; do not show credentials or private financial data.
+  - type: input
+    id: browser_device
+    attributes:
+      label: Browser or Android device
+      placeholder: 'Chrome 140 / Pixel 7 Android 15'
+    validations:
+      required: true
+  - type: input
+    id: approximate_time
+    attributes:
+      label: Approximate time and timezone
+      placeholder: '2026-10-05 14:30 Asia/Saigon'
+    validations:
+      required: true

@@ -8,13 +8,13 @@ Public class-test deployment has not started. Self-service registration/email ve
 
 ## Source and worktree
 
-| Item                | Current state                                                                                                                                                                                 |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Branch / local HEAD | `staging/demo` / `31c2e007583ed19c77d9c05d891e0bc3e332446d`                                                                                                                                   |
-| Remote              | `origin/staging/demo` points to the same SHA                                                                                                                                                  |
-| Source comparison   | `staging/demo` is 11 commits ahead of `feature/automation-sync` at `0043ee64680a346eb816db05bb9ad52f1d46521c`; staging contains the newer Web identity/invitation changes and deployment prep |
-| Worktree            | Dirty; preserve the listed generated/checkpoint/report files and generic AGENTS/CLAUDE files                                                                                                  |
-| Git discipline      | No commit, push, merge, reset, or clean during this reconciliation                                                                                                                            |
+| Item                | Current state                                                                                                                                      |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Branch / local HEAD | `staging/demo` / `7151993624ee5712307c284b4e4509ba461686b9`                                                                                        |
+| Remote              | `origin/staging/demo` matches local at `7151993624ee5712307c284b4e4509ba461686b9`                                                                  |
+| Source comparison   | `staging/demo` contains the newer Web, Mobile and deployment work; `feature/automation-sync` remains at `0043ee64680a346eb816db05bb9ad52f1d46521c` |
+| Worktree            | Three feature/deploy commits pushed; only pre-existing generated/report files and checkpoint updates remain uncommitted                            |
+| Git discipline      | Normal push completed; no merge, force push, reset, or clean                                                                                       |
 
 ## Provider inventory (fresh read-only check)
 
@@ -45,23 +45,27 @@ Android APK/EAS URL: none.
 
 ## Validation
 
-| Area                                    | Result                                              |
-| --------------------------------------- | --------------------------------------------------- |
-| Render workspace/resource inventory     | PASS: authenticated workspace; no Equa resources    |
-| Vercel account/scope inventory          | PASS: Hobby scope; no Equa project                  |
-| Git source                              | PASS: local and remote `staging/demo` at `31c2e00`  |
-| Render Blueprint validation             | PASS: valid 15-action Free-only candidate           |
-| Kong staging image/config               | PASS: Docker build, shell syntax, config parse      |
-| Automation package checks               | PASS: 42 tests, typecheck, lint, build              |
-| Automation DB ownership helper          | PASS: unit coverage; live Postgres/CREATEDB NOT RUN |
-| Render/Vercel deployment                | NOT RUN                                             |
-| Staging migrations                      | NOT RUN                                             |
-| Public registration/email verification  | BLOCKED: Resend sender/API key not configured       |
-| Public Web/Mobile E2E                   | NOT RUN                                             |
-| Mobile local tests/typecheck/lint/build | PASS: 53 tests; package checks pass                 |
-| EAS config/profile inspection           | BLOCKED: CLI requires Expo account login            |
-| Android APK and device validation       | NOT RUN                                             |
-| Production readiness                    | NOT READY                                           |
+| Area                                     | Result                                              |
+| ---------------------------------------- | --------------------------------------------------- |
+| Render workspace/resource inventory      | PASS: authenticated workspace; no Equa resources    |
+| Vercel account/scope inventory           | PASS: Hobby scope; no Equa project                  |
+| Git source                               | PASS: local and remote `staging/demo` at `7151993`  |
+| Render Blueprint validation              | PASS: valid 15-action Free-only candidate           |
+| Kong staging image/config                | PASS: Docker build, shell syntax, config parse      |
+| Automation package checks                | PASS: 42 tests, typecheck, lint, build              |
+| Automation DB ownership helper           | PASS: unit coverage; live Postgres/CREATEDB NOT RUN |
+| Render/Vercel deployment                 | NOT RUN                                             |
+| Staging migrations                       | NOT RUN                                             |
+| Public registration/email verification   | BLOCKED: Resend sender/API key not configured       |
+| Public Web/Mobile E2E                    | NOT RUN                                             |
+| Mobile local tests/typecheck/lint/build  | PASS: 53 tests; package checks pass                 |
+| EAS config/profile inspection            | BLOCKED: CLI requires Expo account login            |
+| Android APK and device validation        | NOT RUN                                             |
+| GitHub CI                                | PASS for `7151993`                                  |
+| GitHub Security                          | PASS for `7151993`                                  |
+| Legacy Deploy staging workflow           | SKIPPED for `staging/demo`                          |
+| Vercel status under inaccessible `equa1` | FAIL; not required and not modified                 |
+| Production readiness                     | NOT READY                                           |
 
 Historical local test/build evidence remains in `docs/PROJECT_EXECUTION_STATE.md` and `docs/INTEGRATION_TESTING.md`; do not report it as public or native validation.
 

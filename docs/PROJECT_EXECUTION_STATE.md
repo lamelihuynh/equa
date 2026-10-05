@@ -14,18 +14,17 @@ Deliver a public STAGING / CLASS TEST release: complete the supported Web and Mo
 
 ## Current HEAD
 
-- Local: `31c2e007583ed19c77d9c05d891e0bc3e332446d`
-- `origin/staging/demo`: same SHA
+- Local: `7151993624ee5712307c284b4e4509ba461686b9`
+- `origin/staging/demo`: `7151993624ee5712307c284b4e4509ba461686b9` (matches local)
 - `feature/automation-sync`: `0043ee64680a346eb816db05bb9ad52f1d46521c`
 - `develop`: `4ff198e092562cbeb46b2882f5629a9badb4e3fd`
 
 ## Working Tree
 
-DIRTY. Current task changes are local and uncommitted:
+DIRTY. The code and deployment source are pushed. Current local-only work is the updated checkpoint and class-test artifacts:
 
-- Mobile: `apps/mobile/App.tsx`, `apps/mobile/eas.json`, `apps/mobile/src/**`
-- Automation/Deployment: Automation database targeting, `render.yaml`, Kong staging template/start script
-- Docs: execution/deployment/environment/readiness checkpoints
+- Modified checkpoints: `docs/PROJECT_EXECUTION_STATE.md`, `docs/STAGING_DEPLOY_STATE.md`
+- New artifacts: `docs/CLASS_TEST_VALIDATION.md`, `.github/ISSUE_TEMPLATE/class-test-bug.yml`
 - Preserve pre-existing/generated: `apps/web/next-env.d.ts`, `apps/web/tsconfig.tsbuildinfo`, `apps/web/AGENTS.md`, `apps/web/CLAUDE.md`, `reports/`
   Do not stage or remove the pre-existing generated/report/AGENTS/CLAUDE files.
 
@@ -35,11 +34,13 @@ DIRTY. Current task changes are local and uncommitted:
 - `staging/demo` carries the latest staging candidate. Its 11 commits after `feature/automation-sync` include Web identity/invitation UX, Kong/Render preparation, and deployment documentation.
 - Earlier local evidence is recorded in `docs/INTEGRATION_TESTING.md` and below; it is not public-staging or native-Mobile evidence.
 - Phase 5 local Mobile work now adds overview, friends, groups/invitations, expenses CRUD, readable labels, explicit API configuration and version-checked offline delete while preserving the existing SecureStore and SQLite/outbox flow.
-- Current branch CI and Security were previously reported passing at this SHA; refresh those checks before any future push/release.
+- Pushed commits: `3a30f27` Mobile flows; `c4b21de` Automation database ownership; `7151993` Free class-test topology/docs.
+- GitHub CI and Security passed on SHA `7151993`; Deploy staging skipped this branch. The old Vercel integration failure is out of scope.
+- Added a truthful `docs/CLASS_TEST_VALIDATION.md` matrix and public GitHub class-test bug form; public URLs/acceptance remain unavailable, so `docs/CLASS_TEST.md` is deferred.
 
 ## Current Phase
 
-Phase 4 audit and local Phase 5 Mobile implementation are complete. The expanded local Phase 9 candidate includes Automation & Sync, its owned database target, and Kong sync routes. Mobile/Automation checks, 15-action Free Blueprint validation, and Kong image/config parsing pass. Resend blocks public registration; Expo account authorization blocks EAS profile/build. No cloud resource has been provisioned.
+Phase 4 audit and local Phase 5 Mobile implementation are complete. The expanded Phase 9 candidate includes Automation & Sync, its owned database target, and Kong sync routes. Three validated commits are pushed at `7151993`; GitHub CI and Security pass, and Deploy staging skipped the branch. A validation matrix and issue form are prepared locally. The old Vercel status under inaccessible `equa1` failed and is explicitly not required. Resend blocks public registration; Expo account authorization blocks EAS profile/build. No cloud resource has been provisioned.
 
 ## Current Architecture
 
@@ -121,14 +122,14 @@ Historical evidence (not re-run for this reconciliation):
 - Staging-preparation checks for Web, Social, Identity, Ledger, Contracts, Kong and Render Blueprint passed as recorded in `docs/STAGING_DEPLOY_STATE.md`.
 - Current Mobile checks: 53/53 tests; typecheck, lint, build, Expo app config, and EAS JSON syntax pass. EAS project-bound config/build and public Gateway variable are NOT RUN.
 - Current Automation checks: 42/42 tests including database ownership URL parsing; typecheck, lint, and build pass. Render Blueprint validation passes with 15 planned actions; Kong staging Docker build and substituted config parse pass. No resources were provisioned.
-- GitHub CI and Security were previously reported PASS for `31c2e00`; refresh before future release activity.
+- GitHub CI and Security PASS for `7151993`; the Vercel check fails under the inaccessible, out-of-scope `equa1` project.
 
 ## Tests Not Run
 
 - Public Web registration/verification and two-account acceptance.
 - Render staging migrations, public health/security smoke, and public Web/API E2E.
 - EAS account-bound build, Android device/emulator, public Mobile Gateway flows, offline/reconnect on device.
-- Class test bug-reporting flow and final validation matrix.
+- Class test report submission and public validation matrix execution.
 
 ## Known Bugs
 
@@ -151,7 +152,7 @@ Two external gates remain: public registration requires a verified Resend sender
 
 ## Exact Next Action
 
-Authorize Resend sender/API-key setup and Expo EAS CLI login without sharing credentials in chat. On resume, recheck provider state, confirm Render Postgres `CREATEDB` capability during the owned Automation migration, and provision only the validated Free topology. Never bundle service secrets.
+Commit and push the class-test matrix/issue form after their final check. Then wait for Resend sender/API-key authorization and Expo account login. Do not modify the inaccessible old Vercel project. After the provider gates, confirm Render Postgres `CREATEDB` during the owned Automation migration and provision only Free resources.
 
 ## Resume Instructions
 
