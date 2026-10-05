@@ -1,101 +1,70 @@
 # STAGING / LECTURER DEMO Deployment Checkpoint
 
-Updated: 2026-10-05. This checkpoint contains no credentials.
+Updated: 2026-10-05. No credentials are recorded here.
 
 ## Current step
 
-The staging source is prepared in a local branch with scoped commits. Do not push, sync a
-Blueprint, create cloud resources, or run remote migrations until the Render inventory is
-authorized and the paid-resource estimate is approved. The remote `staging/demo` branch
-remains absent.
+Prepared and validated the zero-cost candidate topology and scoped source changes. Commits `637b2fd` (Web label regression test) and `a2536bc` (staging runtime/config) are local. No resources, migrations, deploys, DNS changes, or pushes have occurred. The documentation checkpoint is being finalized before the authorized normal push.
 
-## Repository and source
+## Source and worktree
 
-| Item                       | Current state                                                      |
-| -------------------------- | ------------------------------------------------------------------ |
-| Current branch             | `staging/demo` (local only)                                        |
-| Base commit                | `0043ee64680a346eb816db05bb9ad52f1d46521c`                         |
-| Application/config commits | `2ed2d2b`, `c7285ef`, `e6c215f`; documentation commits follow      |
-| `origin/staging/demo`      | Absent; no push performed                                          |
-| Worktree                   | App/config changes committed; reports and generated files excluded |
-| PR #18                     | Existing `develop` PR was not merged or changed                    |
+| Item                     | Current state                                                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Branch / source revision | `staging/demo` / `a2536bceb25469c70d488b98378c57a65ed335ba`                                                       |
+| Remote branch            | `origin/staging/demo` absent; `origin/feature/automation-sync` remains `0043ee64680a346eb816db05bb9ad52f1d46521c` |
+| Recent staging commits   | `637b2fd` Web label test; `a2536bc` Free topology and deployment support; prior app/docs commits remain ancestors |
+| Worktree                 | Staging docs are pending the checkpoint commit; reports and generated files remain excluded                       |
+| Push/merge/reset/clean   | Local commits made; no push, merge, reset, or clean performed                                                     |
 
-## Change classification from the initial worktree audit
+Do not stage `apps/web/AGENTS.md`, `apps/web/CLAUDE.md`, `apps/web/tsconfig.tsbuildinfo`, or `reports/weekly/**`.
 
-| Class                    | Current paths/change groups                                                                                                                                                                  | Staging action                                                |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| A — Required staging app | Web Friends/Groups/Expenses/font and identity label; shared contracts; Identity resolver; Social identities/invitations/outbox; Notification jobs/provider; related manifests/tests/lockfile | Committed in the first two local commits                      |
-| B — Deployment config    | Service `PORT` support; `.dockerignore`; Kong Dockerfile/template/entrypoint; `render.yaml`; CI/Security branch coverage and legacy-deploy guard; environment matrix                         | Committed in the third local commit                           |
-| C — Docs/report only     | Deployment/readiness/operations/integration/runbook/checkpoint docs; all `reports/weekly/**` material                                                                                        | Relevant docs committed; all report artifacts/source excluded |
-| D — Generated            | `apps/web/AGENTS.md`, `apps/web/CLAUDE.md`, `apps/web/tsconfig.tsbuildinfo`, `reports/weekly/.build/__pycache__/**`                                                                          | Do not commit; Docker ignore excludes these paths             |
-| E — Unrelated            | None identified in the current status list                                                                                                                                                   | Preserve; do not stage implicitly                             |
+## Provider inventory
 
-No command has used `git add .`, reset, clean, or force operations. The Docker image build
-context excludes `.env`, reports, generated agent files, and TypeScript build-info files.
+- Render CLI workspace `equa`: no Equa projects, services, Postgres, or Key Value. The current CLI does not expose the workspace billing plan; the Free-only Blueprint validates with 13 create/update actions.
+- Vercel Hobby scope: no Equa project and no domains; one unrelated project is present. The old Web/API CNAMEs point to a Vercel project and Render gateway outside these scopes and are not reused.
+- GitHub integration can read `lamelihuynh/equa`; local Git has push permission. Remote `staging/demo` is absent. No Vercel or Render connector tools are exposed in this session, so the authenticated CLIs are the approved fallback.
+- Connected GitHub identity is `TiKyisme`, while the repository owner is `lamelihuynh`. Vercel Hobby personal-repository import may require owner authorization; no Vercel Git connection has been attempted.
+- Resend credentials and a verified sender are not available. Public registration cannot complete until the provider is set up; email verification will not be bypassed.
 
-## External state observed
+## Minimum-cost candidate
 
-- `https://staging.equa.io.vn` resolves to Vercel and returned HTTP 200. Vercel CLI auth
-  succeeded in a Hobby scope that contains no Equa project or `staging.equa.io.vn` domain;
-  the current domain owner must grant access or confirm a new project/domain is authorized.
-- `api-staging.equa.io.vn` resolves to `equa-kong-staging.onrender.com`; a read-only
-  `/health` probe timed out. Render CLI auth succeeded in workspace `equa`, but its service,
-  project, Postgres, and Key Value listings are empty. The public CNAME may belong to another
-  workspace or be stale; do not reassign it without owner confirmation. The legacy GitHub
-  `RENDER_IDENTITY_DEPLOY_HOOK` secret name exists, but its value was not read.
-- `STAGING_BRANCH` is unset at repository and staging-environment scope; the legacy workflow
-  defaults to `develop`. The candidate explicitly excludes `staging/demo` from that legacy
-  Identity-only image/hook deployment.
-- GitHub, Render, and Vercel CLIs are authenticated. Cloudflare, Resend, and CloudAMQP
-  credentials are not present in the local environment.
+| Resource                                                         | Count | Cost | Status                                   |
+| ---------------------------------------------------------------- | ----: | ---: | ---------------------------------------- |
+| Vercel Hobby Web                                                 |     1 |   $0 | No Equa project yet                      |
+| Render Free Web: Gateway, Identity, Social, Ledger               |     4 |   $0 | Blueprint candidate                      |
+| Render Free Postgres                                             |     1 |   $0 | 1 GB; expires after 30 days; no backups  |
+| Redis, RabbitMQ, Notification worker, Automation, avatar storage |     0 |   $0 | Omitted as optional for the browser demo |
 
-## Proposed resources and cost gate
+Base monthly resource cost is **USD 0** within free-tier quotas. Render Free Web services share 750 monthly workspace-hours, sleep after 15 idle minutes, cold-start, and are public. Vercel Hobby is intended for personal/non-commercial use. Free-tier expiration, quota suspension, and outbound/build usage risks prevent any production claim. Render's live docs: [Free limits](https://render.com/docs/free); Vercel: [Hobby plan](https://vercel.com/docs/plans/hobby).
 
-The candidate `render.yaml` groups resources under Project `equa-staging-demo` and Environment
-`staging`, with unique `equa-staging-demo-*` names. It proposes six paid 0.5 CPU / 512 MB
-compute services, one 0.1 CPU / 256 MB Postgres instance, and one 256 MB Key Value instance:
-about **USD 58/month** on a Render Hobby workspace, before bandwidth/build overages and tax.
-Render CLI validation reports `need_payment_info` for those eight paid resources in the
-selected empty workspace. Render Pro adds USD 25/month and Vercel Pro USD 20/month if either
-plan is required; workspace ownership/current plans remain unverified for Equa. No payment
-method or resources were added. CloudAMQP Little Lemur, Resend Free, R2 free tier, and Vercel
-Hobby remain candidates pending account/ownership confirmation.
+## Validation
 
-## Validation performed
+| Check                                                    | Result                                                                                         |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Render account inventory                                 | PASS: selected workspace lists no Equa resources                                               |
+| Vercel account inventory                                 | PASS: no Equa project/domain in authenticated scope                                            |
+| Render Blueprint validation                              | PASS: valid, 13 actions; no paid plan requested                                                |
+| Frozen install                                           | PASS                                                                                           |
+| Web tests/typecheck/lint/build                           | PASS: 15 tests; Vercel rewrite build used a dummy HTTPS Gateway URL                            |
+| Social tests/typecheck/lint/build                        | PASS: 26 tests                                                                                 |
+| Identity tests/typecheck/lint/build                      | PASS: 15 tests; existing non-fatal Vite config warning                                         |
+| Ledger tests/typecheck/lint/build                        | PASS: 28 tests                                                                                 |
+| Contracts tests/typecheck/lint/build                     | PASS: 5 tests                                                                                  |
+| Kong Free Docker build/config parse/shell syntax         | PASS                                                                                           |
+| Targeted Prettier / scaffold / Compose / diff check      | PASS                                                                                           |
+| Root `pnpm format:check`                                 | FAIL only on untracked `reports/weekly/.build/report_print.css`; excluded from staging commits |
+| Render resource sync, database migrations, public deploy | NOT RUN                                                                                        |
+| GitHub CI/CodeQL for `staging/demo`                      | NOT RUN; branch is not pushed                                                                  |
+| Public Web/API E2E, security smoke, Resend delivery      | NOT RUN                                                                                        |
 
-| Check                                                               | Result                                                                                                                  |
-| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `pnpm install --frozen-lockfile`                                    | PASS                                                                                                                    |
-| Web/Social/Identity/Ledger/Automation/Notification/Contracts builds | PASS                                                                                                                    |
-| Affected unit suites                                                | PASS: Web 15, Social 23, Identity 13, Ledger 26, Automation 38, Notification 17, Contracts 5                            |
-| Prior affected lint/typecheck checks                                | PASS for Web, Social, Identity, Notification, Contracts; new Ledger/Automation builds and tests also pass               |
-| Compose config rendering                                            | PASS                                                                                                                    |
-| Existing local Compose services                                     | Healthy; no restart/down/reset commands were run                                                                        |
-| Render Kong staging Docker image                                    | PASS                                                                                                                    |
-| Render Blueprint JSON Schema and local reference checks             | PASS                                                                                                                    |
-| Render CLI semantic Blueprint validation                            | COST GATE: need_payment_info for six services, Postgres, and Key Value                                                  |
-| Shared Node Docker image                                            | PASS for Identity; other package variants could not resolve Docker Hub base-image metadata after TLS handshake timeouts |
-| Vercel custom Web URL                                               | HTTP 200; this does not validate current source/API-mode browser flow                                                   |
-| Render API `/health`                                                | TIMED OUT with no response; endpoint remains unverified                                                                 |
-| Staging migrations and public E2E                                   | NOT RUN                                                                                                                 |
+## Next actions
 
-The Render Blueprint is candidate configuration only. The full Docker check for the shared
-Node Dockerfile and the Web Dockerfile remains unverified; the selected Render backend uses
-native Node builds, and Web uses Vercel.
+1. Commit the validated documentation checkpoint, excluding generated and report files.
+2. Push normally to `origin/staging/demo` and wait for CI/CodeQL.
+3. Before initial Blueprint sync, configure Resend with a verified sender and store its API key in Render secrets; do not paste the key into chat or docs.
+4. Create/connect the Vercel project to the exact GitHub repo/branch. If the personal-repository owner authorization is required, stop and request it; do not reassign existing domains.
+5. Set Render `WEB_ORIGIN` and `APP_WEB_URL` to the generated Vercel origin, then sync only the validated Free Blueprint after reviewing its complete resource diff. Never create or upgrade paid resources.
+6. Once Render assigns a Gateway URL, set Vercel `EQUA_GATEWAY_URL` to it and `NEXT_PUBLIC_API_BASE_URL=/v1` so browser auth cookies stay same-origin through the rewrite.
+7. Confirm the Postgres owner can create the Social and Ledger databases; review migrations, deploy health, then run public E2E/security smoke.
 
-## Remaining gates and next actions
-
-1. Authorize the Render account/workspace containing the current public API hostname, or
-   confirm the CNAME is stale and the empty `equa` workspace is the intended target.
-2. Authorize the Vercel account/team containing the existing Equa project/domain, or confirm
-   that creating a new project and reassigning the domain is allowed.
-3. Review the paid-resource estimate and explicitly approve the required new resources before
-   provisioning; the current Render validator reports `need_payment_info` for all eight.
-4. Configure Resend verification mail, CloudAMQP RabbitMQ, and S3-compatible avatar secrets
-   through provider dashboards; do not paste secret values into chat.
-5. Only then push the reviewed staging branch, wait for CI/CodeQL, sync the unique-name
-   Blueprint after reviewing its complete resource diff, create missing logical databases,
-   migrate, and run public smoke/E2E/security checks.
-
-Production remains **NOT READY**. `docs/PUBLIC_DEMO.md` is intentionally deferred until public
-staging E2E and security checks pass.
+`docs/PUBLIC_DEMO.md` remains deferred until public MVP E2E and security smoke pass. Production remains **NOT READY**.

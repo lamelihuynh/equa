@@ -1,148 +1,63 @@
-# STAGING / LECTURER DEMO Deployment
+# Equa Staging / Lecturer Demo
 
-This is a public **staging/demo** environment, not production. No resources have been
-created or changed by syncing `render.yaml`; it remains a candidate until Render
-inventory and the paid-resource estimate are reviewed and approved.
+This is a temporary public demo, not production. The current candidate uses only free plans; no Render or Vercel resources have been created or modified.
 
-## Current external state (2026-10-05)
+## Minimum topology
 
-- `https://staging.equa.io.vn` resolves to Vercel and returned HTTP 200. Vercel CLI is
-  authenticated to a Hobby scope with no Equa project or `staging.equa.io.vn` domain. Do
-  not create a duplicate project or reassign the domain without its current owner's approval.
-- `api-staging.equa.io.vn` resolves to `equa-kong-staging.onrender.com`; a read-only
-  `/health` probe timed out. Render CLI is authenticated to workspace `equa`, whose project,
-  service, Postgres, and Key Value lists are empty. The DNS target may belong to another
-  workspace or be stale. The existing GitHub `staging` environment still has the legacy
-  smoke URL and Identity deploy-hook secret name; its value was not read.
-- The local `staging/demo` branch now has the validated application/config commits; the
-  remote branch is still absent. `STAGING_BRANCH` is unset at repository and `staging`
-  environment scope, so the legacy deploy workflow defaults to `develop`. CI and CodeQL
-  include `staging/demo`; the legacy Identity hook workflow explicitly excludes it.
-- The candidate Blueprint groups resources under Project `equa-staging-demo`, Environment
-  `staging`, with unique `equa-staging-demo-*` names. Reassigning the existing API hostname
-  requires confirmation from its current owner.
+| Component               | Classification                   | Candidate                         | Demo notes                                                                                                |
+| ----------------------- | -------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Web                     | REQUIRED                         | Vercel Hobby, root `apps/web`     | Deploy the GitHub `staging/demo` branch; use its generated `.vercel.app` hostname.                        |
+| Gateway                 | REQUIRED                         | Render Free Web service           | The browser uses only this HTTPS URL. Kong Admin API stays disabled.                                      |
+| Identity                | REQUIRED                         | Render Free Web service           | JWT auth remains required. Public registration needs a configured verified-email provider.                |
+| Social                  | REQUIRED                         | Render Free Web service           | Owns `equa_social`; in-app friend/group flows remain available.                                           |
+| Ledger                  | REQUIRED                         | Render Free Web service           | Owns `equa_ledger`; all financial writes still go through Ledger.                                         |
+| PostgreSQL              | REQUIRED                         | One Render Free Postgres instance | Three logical databases; 1 GB and 30-day lifetime.                                                        |
+| Automation & Sync       | OPTIONAL                         | Omitted                           | Current public Web demo has no recurring/offline-sync UI. Mobile is not deployed.                         |
+| Notification / RabbitMQ | OPTIONAL                         | Omitted                           | Group invitations remain in-app; external invite email is not needed for the public demo.                 |
+| Redis / Key Value       | NOT REQUIRED                     | Omitted                           | Staging Kong rate limiting uses one-instance local counters.                                              |
+| Avatar object storage   | NOT REQUIRED                     | Omitted                           | `AVATAR_STORAGE_ENABLED=false`; avatar upload reports unavailable.                                        |
+| Identity email          | REQUIRED FOR PUBLIC REGISTRATION | Resend Free, after setup          | Identity cannot verify newly registered users without a real provider. No verification bypass is allowed. |
 
-## Proposed topology
+## Zero-cost plan and trade-offs
 
-| Layer          | Component                                                 | Exposure                    | Staging behavior                                                        |
-| -------------- | --------------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------- |
-| Web            | Existing Vercel Next.js project, root `apps/web`          | Public                      | API mode; `NEXT_PUBLIC_API_BASE_URL=https://api-staging.equa.io.vn/v1`  |
-| Gateway        | New Render Kong web service                               | Public                      | Only public API entry; restricted CORS, rate limiting, correlation ID   |
-| Backend        | Identity, Social, Ledger, Automation & Sync               | Render private services     | HTTP service-key boundaries; one `PORT`, bind `0.0.0.0`                 |
-| Worker         | Notification                                              | Render background worker    | RabbitMQ ingestion and durable jobs; external invitation email disabled |
-| Data           | Render Postgres                                           | Private                     | One server, five logical databases owned by their services              |
-| Rate limits    | Render Key Value                                          | Private                     | Redis-backed Kong counters; persistent paid 256 MB plan                 |
-| Events         | CloudAMQP Little Lemur or an existing authorized RabbitMQ | Private outbound connection | Shared free staging tier candidate; not production-grade                |
-| Identity email | Resend                                                    | Outbound provider           | Verification/reset mail; requires a verified sender and API key         |
-| Avatar objects | S3-compatible staging bucket (R2 candidate)               | Provider URL                | Identity requires access/secret keys during startup                     |
+| Resource                                                  | Plan                     |        Monthly base cost | Limits and trade-off                                                                                                                                                     |
+| --------------------------------------------------------- | ------------------------ | -----------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Vercel Web                                                | Hobby                    |                       $0 | Personal/non-commercial use; included usage limits apply.                                                                                                                |
+| Gateway, Identity, Social, Ledger                         | Render Free Web          |                       $0 | Four services share 750 workspace instance-hours/month; each sleeps after 15 minutes and may take about a minute to wake. Free services have public `onrender.com` URLs. |
+| Postgres                                                  | Render Free              |                       $0 | One instance/workspace, 1 GB, no backups, expires after 30 days.                                                                                                         |
+| Redis, RabbitMQ, Notification, Automation, object storage | Omitted                  |                       $0 | Their optional public-demo behavior is unavailable.                                                                                                                      |
+| Identity verification mail                                | Resend Free, if eligible | $0 within provider quota | Requires a Resend account, verified sender domain, and API key; free quota is currently 3,000 messages/month and 100/day.                                                |
 
-The Platform service is omitted because it is currently only a health scaffold and is not
-needed by the demo flows. Mailpit remains local-only. Notification email is explicitly
-disabled in staging unless a supported external provider is implemented and configured;
-Social-owned group invitations remain visible and actionable in the Web app.
+The Render Free tier is suitable only for a short, low-volume demo. Free services can be restarted, cold-start, or suspended at quota limits. Outbound bandwidth/build overages may incur costs if billing is enabled; do not add a payment method or upgrade a plan for this setup. The Vercel Hobby plan is limited to personal/non-commercial use. See [Render Free limits](https://render.com/docs/free), [Vercel Hobby](https://vercel.com/docs/plans/hobby), and [Resend pricing](https://resend.com/pricing).
 
-## Database and migration plan
+## Boundaries and data
 
-Use separate logical databases on the staging Postgres server:
+Render Free Web services cannot receive private-network traffic. The backend Web services therefore have public hostnames; the browser calls same-origin `/v1/*` paths on Vercel, which rewrites server-side to Kong. This preserves Identity's existing `/v1/auth` refresh-cookie path and avoids third-party cookies. Direct API routes still require JWTs or service keys. Social-to-Identity/Ledger and Ledger-to-Social calls use HTTPS between Render hostnames. This public-upstream arrangement is a demo compromise; production remains **NOT READY**.
 
-| Owner             | Database               |
-| ----------------- | ---------------------- |
-| Identity          | `equa_identity`        |
-| Social            | `equa_social`          |
-| Ledger            | `equa_ledger`          |
-| Automation & Sync | `equa_automation_sync` |
-| Notification      | `equa_notification`    |
+Postgres remains one server with separate logical databases:
 
-The candidate Blueprint declares only the initial `equa_identity` database. After
-authorization, inspect the selected Render server and create any missing logical
-databases additively. Do not drop/reset databases or share one application database.
-Each service receives only its own `*_DATABASE_URL`. Migrations run as that service's
-pre-deploy command:
+- Identity: `equa_identity`
+- Social: `equa_social`
+- Ledger: `equa_ledger`
 
-```text
-pnpm --filter @equa/identity-service db:migrate
-pnpm --filter @equa/social-service db:migrate
-pnpm --filter @equa/ledger-service migrate
-pnpm --filter @equa/automation-sync-service db:migrate
-pnpm --filter @equa/notification-worker db:migrate
-```
+Each service's code targets its own database name. The current Blueprint uses the server's default database credential for those URLs, so database-user isolation is not a production security boundary. There are no cross-service queries or foreign keys.
 
-Run these only after confirming the target is a staging database and the Blueprint has
-been approved.
+Render Free Web does not support paid pre-deploy commands. Identity, Social, and Ledger therefore run their idempotent migrations in their start commands. Social and Ledger create their own logical databases when absent. The three services currently use the Postgres instance's default credential with distinct database names; app code does not query another service's database, but database-user isolation is not provided. See [Render deploy steps](https://render.com/docs/deploys).
 
-## Security and Web configuration
+Kong allows one exact `WEB_ORIGIN`, applies correlation IDs and request-size limits, and uses local per-instance rate limits. Its counter resets on restart. PostgreSQL is referenced over Render's same-region private connection. No secret is included in Git.
 
-- Public traffic goes through Kong. Identity, Social, Ledger, and Automation use private
-  Render networking. Notification is an outbound-only worker. Postgres, Redis, and the
-  RabbitMQ credentials are not placed in browser bundles.
-- Kong's staging template accepts one explicit `WEB_ORIGIN`; use
-  `https://staging.equa.io.vn`, not `*`. Only the gateway hostname goes in Web config.
-- Identity uses `NODE_ENV=production`, secure cookies, and the canonical Web URL. The
-  custom Web and API hosts are same-site subdomains. Use the custom Web domain for login;
-  the default `.vercel.app` origin has not been verified for refresh-cookie behavior.
-- Internal Identity lookup routes are not routed through Kong. Service calls use private
-  URLs and service keys; services do not connect to another service's database.
-- The gateway reads Render's private Key Value `REDIS_URL`, accepts only the private
-  `redis://` scheme, then passes its host/port to Kong's Redis rate limiter.
-- Local `Mailpit`, `.env`, `host.docker.internal`, and local MinIO URLs are not staging
-  providers. Secrets belong in Render/Vercel/provider dashboards, never in Git.
+## Deployment sequence
 
-## Cost estimate and approval gate
+1. Validate and push the reviewed local `staging/demo` source; wait for CI and CodeQL.
+2. Configure Resend with a verified sender and store its key in Render secrets. The initial Blueprint sync requests it; do not bypass email verification.
+3. Create and connect the Vercel project `equa-web-staging` to `lamelihuynh/equa`, branch `staging/demo`, root `apps/web`. Use the actual assigned `.vercel.app` URL. A personal-repository import may require authorization from its owner.
+4. Set Render `WEB_ORIGIN` and `APP_WEB_URL` to the Vercel origin, validate the Free-only Blueprint and review its full resource diff, then sync it in `equa-staging-demo/staging`.
+5. Confirm the Postgres owner can create the Social and Ledger databases; each service runs its idempotent migration at startup.
+6. After the Gateway hostname exists, set Vercel `EQUA_GATEWAY_URL` to it and `NEXT_PUBLIC_API_BASE_URL=/v1`; deploy Web and verify HTTPS/no localhost requests.
+7. Run public health/security smoke, then the two-account Web E2E. Publish `docs/PUBLIC_DEMO.md` only after that E2E passes.
 
-The current candidate uses six paid Render compute services (`0.5c-512mb`, about
-USD 7/month each), Render Postgres (`0.1c-256mb`, about USD 6/month), and Render Key Value
-(`256mb`, about USD 10/month): approximately **USD 58/month** before bandwidth, build
-pipeline overages, tax, or any workspace/Vercel plan charges. The Hobby workspace has no
-monthly workspace fee, but private services and background workers do not have a free
-compute plan. A Render Pro workspace adds USD 25/month if required; its current plan is
-unknown. The Vercel account plan is also unknown: Hobby is free for personal projects;
-Pro is USD 20/month. CloudAMQP Little Lemur, Resend Free, and R2's free tier are suitable
-candidates within their quotas, but each still requires account/provider
-authorization and setup. See the [Render pricing](https://render.com/pricing),
-[Render compute plans](https://render.com/docs/compute-plans),
-[Render free limits](https://render.com/docs/free),
-[Vercel pricing](https://vercel.com/pricing),
-[CloudAMQP plans](https://www.cloudamqp.com/plans.html),
-[Resend pricing](https://resend.com/pricing), and
-[Cloudflare R2 pricing](https://developers.cloudflare.com/r2/pricing/).
+Do not reuse `staging.equa.io.vn` or `api-staging.equa.io.vn`; their DNS points to projects outside the currently authenticated provider scopes. Do not change their DNS.
 
-**Do not sync the Blueprint or provision resources until existing Render resources have
-been inventoried and the estimated paid baseline has explicit approval.** Reuse can change
-the incremental cost, but must not overwrite the current API gateway, Identity service,
-Postgres, Redis, or any production resource.
+## Current stop conditions
 
-## Local validation
-
-`pnpm install --frozen-lockfile`, Web and backend package builds, the Compose config check,
-and the staging Kong Docker build passed locally. The Render Blueprint passed the public
-Render JSON Schema and local project/environment service/database/group-reference checks.
-Render CLI validation reports `need_payment_info` for its six compute services, Postgres,
-and Key Value. The shared Node Docker build passed for Identity; attempts for the other
-package variants stopped before build execution when Docker Hub manifest requests timed out.
-These services use native Node builds in the candidate Render Blueprint. Full public API
-health, Render/Vercel settings, migrations, and public E2E remain unverified.
-
-## Deployment sequence after the gates
-
-1. Identify the Render workspace/account that owns the current API hostname. The authenticated
-   `equa` workspace is empty; do not reassign the hostname until its owner/current state is
-   confirmed.
-2. Authorize the Vercel account/team containing the existing Equa project/domain. The current
-   authenticated Hobby scope has no Equa project; do not create a duplicate without approval.
-3. Review the paid Render resource estimate and explicitly approve any new resources before
-   provisioning.
-4. Configure CloudAMQP, Resend sender/API key, and S3-compatible avatar credentials via
-   their dashboards and Render secrets. Do not send secrets in chat or commit them.
-5. After the gates, push the prepared `staging/demo` source and let CI/CodeQL finish before
-   Render deploys.
-6. Sync the unique-name Blueprint only after checking every resource diff. Create missing
-   logical databases additively; apply each service migration.
-7. Connect the existing API custom hostname only after verifying it can be reassigned
-   without modifying the current service or data.
-8. Configure the existing Vercel project with root `apps/web`, the canonical API base,
-   and the staging avatar origin if avatars are tested.
-9. Verify Gateway routes, CORS, auth/cookies, private-service isolation, then run synthetic
-   public E2E and technical staging tests. Publish `docs/PUBLIC_DEMO.md` only after those
-   checks pass.
-
-Production remains **NOT READY**. Staging validation is not production validation.
+Resend account/sender setup is required before synthetic users can register and verify. The Vercel Hobby scope is not the GitHub repository owner; verify the Git connection can be authorized before connecting the project. If either provider requests owner authorization, stop at that request. No paid resource is in this plan.
