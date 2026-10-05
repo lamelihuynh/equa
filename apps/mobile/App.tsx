@@ -6,7 +6,9 @@ import {
   Alert,
   AppState,
   Image,
+  KeyboardAvoidingView,
   Pressable,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,18 +23,28 @@ import { createMobileAuthApi } from './src/auth/auth-api';
 import { finishLoginHandoff } from './src/auth/login-handoff';
 import { accountHint, SessionManager } from './src/auth/session';
 import { LocalStore, type LocalConflictSummary } from './src/db/local-store';
+import { MobileApiClient } from './src/api/mobile-api';
+import { resolveApiBaseUrl } from './src/api/api-base-url';
 import { createSyncTransport } from './src/api/sync-api';
-import { OfflineDataPanel } from './src/sync/offline-data-panel';
 import { createExpoConnectivity } from './src/sync/expo-connectivity';
 import { SyncClient } from './src/sync/sync-client';
+import { ExpensesScreen } from './src/screens/expenses-screen';
+import { FriendsScreen } from './src/screens/friends-screen';
+import { GroupsScreen } from './src/screens/groups-screen';
+import { HomeScreen } from './src/screens/home-screen';
 
 declare const process: { env: Record<string, string | undefined> };
 
-const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/v1';
+const apiBaseUrl = resolveApiBaseUrl(
+  process.env.EXPO_PUBLIC_API_BASE_URL,
+  __DEV__,
+  Platform.OS === 'android' ? 'android' : 'other',
+);
 const accessTokenKey = 'equa_access_token';
 const mobileAuthApi = createMobileAuthApi(apiBaseUrl);
 const connectivity = createExpoConnectivity();
 type Mode = 'signup' | 'login' | 'forgot';
+type AppTab = 'home' | 'friends' | 'groups' | 'expenses' | 'profile';
 interface ApiResponse {
   message?: string;
   accessToken?: string;
@@ -78,6 +90,7 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [activeTab, setActiveTab] = useState<AppTab>('home');
 
   // Profile state
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -98,9 +111,14 @@ export default function App() {
   const localStoreRef = useRef<LocalStore | null>(null);
   const ownerRef = useRef<string | null>(null);
   const sessionRef = useRef<SessionManager | null>(null);
+  const apiRef = useRef<MobileApiClient | null>(null);
+  const profileRequestGenerationRef = useRef(0);
 
   if (!sessionRef.current) {
     sessionRef.current = new SessionManager(mobileAuthApi);
+  }
+  if (!apiRef.current) {
+    apiRef.current = new MobileApiClient(apiBaseUrl, (refresh) => syncToken(refresh));
   }
 
   useEffect(() => {
@@ -165,24 +183,42 @@ export default function App() {
   }, [authenticated]);
 
   async function loadProfile() {
+    const requestGeneration = ++profileRequestGenerationRef.current;
+    const sessionEpoch = sessionRef.current?.currentEpoch();
+    const ownerId = ownerRef.current;
+    const isCurrent = (): boolean =>
+      sessionEpoch !== undefined &&
+      sessionRef.current?.isCurrent(sessionEpoch) === true &&
+      ownerRef.current === ownerId &&
+      profileRequestGenerationRef.current === requestGeneration;
     setProfileLoading(true);
     setMessage('');
     try {
-      const token = await SecureStore.getItemAsync(accessTokenKey);
+      let token = await syncToken(false);
+      if (!isCurrent()) return;
       if (!token) throw new Error('No access token.');
 
-      const response = await fetch(`${apiBaseUrl}/profile/me`, {
+      let response = await fetch(`${apiBaseUrl}/profile/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.status === 401) {
-        await logout();
-        return;
+        token = await syncToken(true);
+        if (!isCurrent() || !token) return;
+        response = await fetch(`${apiBaseUrl}/profile/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.status === 401) {
+          await logout();
+          return;
+        }
       }
 
       const result: unknown = await response.json();
       if (!response.ok || !isProfileData(result)) throw new Error('Không thể tải hồ sơ.');
 
+      if (!isCurrent()) return;
+      if (result.id !== ownerId) throw new Error('Profile session mismatch.');
       setProfile(result);
       setFormDisplayName(result.displayName);
       setFormBio(result.bio);
@@ -194,28 +230,37 @@ export default function App() {
         const avatarResponse = await fetch(`${apiBaseUrl}/profile/me/avatar-url`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (avatarResponse.ok) {
+        if (isCurrent() && avatarResponse.ok) {
           const avatarResult: unknown = await avatarResponse.json();
-          if (isAvatarUrlResponse(avatarResult)) {
+          if (isCurrent() && isAvatarUrlResponse(avatarResult)) {
             setAvatarUrl(avatarResult.url);
           }
         }
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Không thể tải hồ sơ.');
+      if (isCurrent()) setMessage(error instanceof Error ? error.message : 'Không thể tải hồ sơ.');
     } finally {
-      setProfileLoading(false);
+      if (isCurrent()) setProfileLoading(false);
     }
   }
 
   async function saveProfile() {
+    const requestGeneration = profileRequestGenerationRef.current;
+    const sessionEpoch = sessionRef.current?.currentEpoch();
+    const ownerId = ownerRef.current;
+    const isCurrent = (): boolean =>
+      sessionEpoch !== undefined &&
+      sessionRef.current?.isCurrent(sessionEpoch) === true &&
+      ownerRef.current === ownerId &&
+      profileRequestGenerationRef.current === requestGeneration;
     setSaving(true);
     setMessage('');
     try {
-      const token = await SecureStore.getItemAsync(accessTokenKey);
+      let token = await syncToken(false);
+      if (!isCurrent()) return;
       if (!token) throw new Error('No access token.');
 
-      const response = await fetch(`${apiBaseUrl}/profile/me`, {
+      let response = await fetch(`${apiBaseUrl}/profile/me`, {
         method: 'PATCH',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -231,23 +276,51 @@ export default function App() {
       });
 
       if (response.status === 401) {
-        await logout();
-        return;
+        token = await syncToken(true);
+        if (!isCurrent() || !token) return;
+        response = await fetch(`${apiBaseUrl}/profile/me`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            displayName: formDisplayName,
+            bio: formBio,
+            defaultCurrency: formCurrency,
+            locale: formLanguage,
+            timezone: formTimezone,
+          }),
+        });
+        if (response.status === 401) {
+          await logout();
+          return;
+        }
       }
 
       const result: unknown = await response.json();
       if (!response.ok || !isProfileData(result)) throw new Error('Không thể lưu hồ sơ.');
 
+      if (!isCurrent()) return;
+      if (result.id !== ownerId) throw new Error('Profile session mismatch.');
       setProfile(result);
       setMessage('Đã lưu thay đổi hồ sơ.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Không thể lưu hồ sơ.');
+      if (isCurrent()) setMessage(error instanceof Error ? error.message : 'Không thể lưu hồ sơ.');
     } finally {
-      setSaving(false);
+      if (isCurrent()) setSaving(false);
     }
   }
 
   async function pickAndUploadAvatar() {
+    const requestGeneration = profileRequestGenerationRef.current;
+    const sessionEpoch = sessionRef.current?.currentEpoch();
+    const ownerId = ownerRef.current;
+    const isCurrent = (): boolean =>
+      sessionEpoch !== undefined &&
+      sessionRef.current?.isCurrent(sessionEpoch) === true &&
+      ownerRef.current === ownerId &&
+      profileRequestGenerationRef.current === requestGeneration;
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Cần quyền truy cập', 'Cho phép truy cập thư viện ảnh để đổi avatar.');
@@ -261,6 +334,7 @@ export default function App() {
       quality: 0.8,
     });
 
+    if (!isCurrent()) return;
     if (result.canceled || !result.assets[0]) return;
 
     const asset = result.assets[0];
@@ -272,7 +346,8 @@ export default function App() {
     setSaving(true);
     setMessage('');
     try {
-      const token = await SecureStore.getItemAsync(accessTokenKey);
+      let token = await syncToken(false);
+      if (!isCurrent()) return;
       if (!token) throw new Error('No access token.');
 
       const formData = new FormData();
@@ -282,43 +357,64 @@ export default function App() {
         name: asset.fileName ?? 'avatar.jpg',
       } as unknown as Blob);
 
-      const response = await fetch(`${apiBaseUrl}/profile/me/avatar`, {
+      let response = await fetch(`${apiBaseUrl}/profile/me/avatar`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
 
+      if (!isCurrent()) return;
+
       if (response.status === 401) {
-        await logout();
-        return;
+        token = await syncToken(true);
+        if (!isCurrent() || !token) return;
+        response = await fetch(`${apiBaseUrl}/profile/me/avatar`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        if (response.status === 401) {
+          await logout();
+          return;
+        }
       }
 
       const result: unknown = await response.json();
       if (!response.ok || !isProfileData(result)) throw new Error('Không thể tải avatar.');
 
+      if (!isCurrent()) return;
       setProfile(result);
 
-      const avatarResponse = await fetch(`${apiBaseUrl}/profile/me/avatar-url`, {
+      let avatarResponse = await fetch(`${apiBaseUrl}/profile/me/avatar-url`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (avatarResponse.ok) {
+      if (avatarResponse.status === 401) {
+        token = await syncToken(true);
+        if (!isCurrent() || !token) return;
+        avatarResponse = await fetch(`${apiBaseUrl}/profile/me/avatar-url`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+      if (isCurrent() && avatarResponse.ok) {
         const avatarResult: unknown = await avatarResponse.json();
-        if (isAvatarUrlResponse(avatarResult)) {
+        if (isCurrent() && isAvatarUrlResponse(avatarResult)) {
           setAvatarUrl(avatarResult.url);
         }
       }
 
       setMessage('Đã tải avatar lên MinIO.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Không thể tải avatar.');
+      if (isCurrent()) setMessage(error instanceof Error ? error.message : 'Không thể tải avatar.');
     } finally {
-      setSaving(false);
+      if (isCurrent()) setSaving(false);
     }
   }
 
   async function logout() {
+    profileRequestGenerationRef.current += 1;
+    setSaving(false);
     const ownerId = ownerRef.current;
-    const clearSession = sessionRef.current?.clear();
+    const clearSession = sessionRef.current?.logout();
     ownerRef.current = null;
     localStoreRef.current = null;
     setSyncOwner(null);
@@ -335,7 +431,10 @@ export default function App() {
         'Hàng đợi vẫn được giữ cục bộ; hãy đăng nhập lại cùng tài khoản để tiếp tục đồng bộ.';
     }
     try {
-      await clearSession;
+      const revoked = await clearSession;
+      if (!revoked)
+        warning =
+          'Đã đăng xuất trên thiết bị; máy chủ chưa xác nhận thu hồi phiên vì không kết nối được.';
     } catch {
       warning =
         'Không thể xóa an toàn thông tin phiên. Hãy thử đăng xuất lại khi thiết bị ổn định.';
@@ -343,6 +442,7 @@ export default function App() {
     setPassword('');
     setProfile(null);
     setAvatarUrl(null);
+    setActiveTab('home');
     setMessage(warning);
     setAuthenticated(false);
   }
@@ -366,7 +466,7 @@ export default function App() {
   function confirmUseServerVersion(conflict: LocalConflictSummary): void {
     Alert.alert(
       'Xung đột phiên bản',
-      `Bỏ sửa cục bộ cho ${conflict.description ?? conflict.entityKey} và dùng dữ liệu mới nhất từ máy chủ?`,
+      `Bỏ sửa cục bộ cho ${conflict.description ?? 'khoản chi'} và dùng dữ liệu mới nhất từ máy chủ?`,
       [
         { text: 'Giữ để xem lại', style: 'cancel' },
         {
@@ -501,257 +601,338 @@ export default function App() {
       .slice(0, 2)
       .toUpperCase();
 
-    return (
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.eyebrow}>EQUA · HỒ SƠ</Text>
-        <Text style={styles.title}>Thiết lập Equa.</Text>
-
-        {syncConflicts.length > 0 && (
-          <View style={styles.syncConflictCard}>
-            <Text style={styles.syncConflictTitle}>
-              Cần xem lại {syncConflicts.length} xung đột đồng bộ
-            </Text>
-            <Text style={styles.syncConflictHint}>
-              Bản sửa trên thiết bị vẫn được giữ. Chọn dùng dữ liệu máy chủ để bỏ bản sửa cục bộ.
-            </Text>
-            {syncConflicts.map((conflict) => (
-              <View style={styles.syncConflictRow} key={conflict.operationId}>
-                <View style={styles.syncConflictCopy}>
-                  <Text style={styles.syncConflictName}>{conflict.description ?? 'Khoản chi'}</Text>
-                  <Text style={styles.syncConflictMeta}>
-                    {conflict.entityKey} · phiên bản gửi {conflict.expectedVersion ?? 'không rõ'}
-                  </Text>
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  style={styles.syncConflictButton}
-                  onPress={() => confirmUseServerVersion(conflict)}
-                >
-                  <Text style={styles.syncConflictButtonText}>Dùng máy chủ</Text>
-                </Pressable>
+    const api = apiRef.current;
+    const currentUserId = profile?.id ?? syncOwner ?? '';
+    const conflictCard =
+      syncConflicts.length > 0 ? (
+        <View style={styles.syncConflictCard}>
+          <Text style={styles.syncConflictTitle}>
+            Cần xem lại {syncConflicts.length} xung đột đồng bộ
+          </Text>
+          <Text style={styles.syncConflictHint}>
+            Bản sửa trên thiết bị vẫn được giữ. Chọn dùng dữ liệu máy chủ để bỏ bản sửa cục bộ.
+          </Text>
+          {syncConflicts.map((conflict) => (
+            <View style={styles.syncConflictRow} key={conflict.operationId}>
+              <View style={styles.syncConflictCopy}>
+                <Text style={styles.syncConflictName}>{conflict.description ?? 'Khoản chi'}</Text>
+                <Text style={styles.syncConflictMeta}>
+                  Phiên bản gửi {conflict.expectedVersion ?? 'không rõ'}
+                </Text>
               </View>
+              <Pressable
+                accessibilityRole="button"
+                style={styles.syncConflictButton}
+                onPress={() => confirmUseServerVersion(conflict)}
+              >
+                <Text style={styles.syncConflictButtonText}>Dùng máy chủ</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      ) : null;
+
+    if (activeTab !== 'profile') {
+      return (
+        <View style={styles.appShell}>
+          <MainNavigation activeTab={activeTab} onSelect={setActiveTab} />
+          {conflictCard}
+          {api && activeTab === 'home' ? (
+            <HomeScreen api={api} displayName={profile?.displayName ?? 'Bạn'} />
+          ) : null}
+          {api && activeTab === 'friends' ? (
+            <FriendsScreen api={api} currentUserId={currentUserId} />
+          ) : null}
+          {api && activeTab === 'groups' ? (
+            <GroupsScreen api={api} currentUserId={currentUserId} />
+          ) : null}
+          {api && activeTab === 'expenses' ? (
+            <ExpensesScreen
+              api={api}
+              apiBaseUrl={apiBaseUrl}
+              currentUserId={currentUserId}
+              displayName={profile?.displayName ?? 'Bạn'}
+              store={localStoreRef.current}
+              sync={syncRef.current}
+              accessToken={(refresh) => syncToken(refresh)}
+            />
+          ) : null}
+          <StatusBar style="dark" />
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.appShell}>
+        <MainNavigation activeTab={activeTab} onSelect={setActiveTab} />
+        {conflictCard}
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.eyebrow}>EQUA · HỒ SƠ</Text>
+          <Text style={styles.title}>Thiết lập Equa.</Text>
+
+          {/* Avatar */}
+          <Pressable
+            style={styles.avatarCircle}
+            onPress={() => {
+              void pickAndUploadAvatar();
+            }}
+            disabled={saving}
+          >
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={avatarImageStyle} />
+            ) : (
+              <Text style={styles.avatarInitials}>{initials}</Text>
+            )}
+            <Text style={styles.avatarBadge}>Thay</Text>
+          </Pressable>
+
+          {/* Display Name */}
+          <Text style={styles.fieldLabel}>Tên hiển thị</Text>
+          <TextInput
+            style={styles.input}
+            value={formDisplayName}
+            onChangeText={setFormDisplayName}
+            placeholder="Tên của bạn"
+            maxLength={100}
+          />
+
+          {/* Email (read-only) */}
+          <Text style={styles.fieldLabel}>Email</Text>
+          <TextInput
+            style={[styles.input, styles.inputDisabled]}
+            value={profile?.email ?? ''}
+            editable={false}
+          />
+
+          {/* Bio */}
+          <Text style={styles.fieldLabel}>Giới thiệu</Text>
+          <TextInput
+            style={[styles.input, styles.textarea]}
+            value={formBio}
+            onChangeText={setFormBio}
+            placeholder="Một chút về bạn..."
+            multiline
+            maxLength={500}
+            textAlignVertical="top"
+          />
+
+          {/* Currency */}
+          <Text style={styles.fieldLabel}>Tiền tệ mặc định</Text>
+          <View style={styles.chipRow}>
+            {SUPPORTED_CURRENCIES.map((c) => (
+              <Pressable
+                key={c}
+                style={[styles.chip, formCurrency === c && styles.chipActive]}
+                onPress={() => setFormCurrency(c)}
+              >
+                <Text style={[styles.chipText, formCurrency === c && styles.chipTextActive]}>
+                  {c}
+                </Text>
+              </Pressable>
             ))}
           </View>
-        )}
 
-        {syncOwner && (
-          <OfflineDataPanel
-            ownerId={syncOwner}
-            apiBaseUrl={apiBaseUrl}
-            store={localStoreRef.current}
-            sync={syncRef.current}
-            accessToken={(refresh) => syncToken(refresh)}
-          />
-        )}
-
-        {/* Avatar */}
-        <Pressable
-          style={styles.avatarCircle}
-          onPress={() => {
-            void pickAndUploadAvatar();
-          }}
-          disabled={saving}
-        >
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={avatarImageStyle} />
-          ) : (
-            <Text style={styles.avatarInitials}>{initials}</Text>
-          )}
-          <Text style={styles.avatarBadge}>Thay</Text>
-        </Pressable>
-
-        {/* Display Name */}
-        <Text style={styles.fieldLabel}>Tên hiển thị</Text>
-        <TextInput
-          style={styles.input}
-          value={formDisplayName}
-          onChangeText={setFormDisplayName}
-          placeholder="Tên của bạn"
-          maxLength={100}
-        />
-
-        {/* Email (read-only) */}
-        <Text style={styles.fieldLabel}>Email</Text>
-        <TextInput
-          style={[styles.input, styles.inputDisabled]}
-          value={profile?.email ?? ''}
-          editable={false}
-        />
-
-        {/* Bio */}
-        <Text style={styles.fieldLabel}>Giới thiệu</Text>
-        <TextInput
-          style={[styles.input, styles.textarea]}
-          value={formBio}
-          onChangeText={setFormBio}
-          placeholder="Một chút về bạn..."
-          multiline
-          maxLength={500}
-          textAlignVertical="top"
-        />
-
-        {/* Currency */}
-        <Text style={styles.fieldLabel}>Tiền tệ mặc định</Text>
-        <View style={styles.chipRow}>
-          {SUPPORTED_CURRENCIES.map((c) => (
-            <Pressable
-              key={c}
-              style={[styles.chip, formCurrency === c && styles.chipActive]}
-              onPress={() => setFormCurrency(c)}
-            >
-              <Text style={[styles.chipText, formCurrency === c && styles.chipTextActive]}>
-                {c}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Language */}
-        <Text style={styles.fieldLabel}>Ngôn ngữ</Text>
-        <View style={styles.chipRow}>
-          {SUPPORTED_LANGUAGES.map((lang) => (
-            <Pressable
-              key={lang}
-              style={[styles.chip, formLanguage === lang && styles.chipActive]}
-              onPress={() => setFormLanguage(lang)}
-            >
-              <Text style={[styles.chipText, formLanguage === lang && styles.chipTextActive]}>
-                {languageLabels[lang] ?? lang}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Timezone */}
-        <Text style={styles.fieldLabel}>Múi giờ</Text>
-        <View style={styles.chipRow}>
-          {timezoneOptions.map((tz) => (
-            <Pressable
-              key={tz}
-              style={[styles.chip, formTimezone === tz && styles.chipActive]}
-              onPress={() => setFormTimezone(tz)}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  styles.chipTextSmall,
-                  formTimezone === tz && styles.chipTextActive,
-                ]}
-                numberOfLines={1}
+          {/* Language */}
+          <Text style={styles.fieldLabel}>Ngôn ngữ</Text>
+          <View style={styles.chipRow}>
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <Pressable
+                key={lang}
+                style={[styles.chip, formLanguage === lang && styles.chipActive]}
+                onPress={() => setFormLanguage(lang)}
               >
-                {tz
-                  .replace('Asia/', '')
-                  .replace('America/', '')
-                  .replace('Europe/', '')
-                  .replace('_', ' ')}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+                <Text style={[styles.chipText, formLanguage === lang && styles.chipTextActive]}>
+                  {languageLabels[lang] ?? lang}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
 
-        {/* Message */}
-        {message !== '' && <Text style={styles.formMessage}>{message}</Text>}
+          {/* Timezone */}
+          <Text style={styles.fieldLabel}>Múi giờ</Text>
+          <View style={styles.chipRow}>
+            {timezoneOptions.map((tz) => (
+              <Pressable
+                key={tz}
+                style={[styles.chip, formTimezone === tz && styles.chipActive]}
+                onPress={() => setFormTimezone(tz)}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    styles.chipTextSmall,
+                    formTimezone === tz && styles.chipTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {tz
+                    .replace('Asia/', '')
+                    .replace('America/', '')
+                    .replace('Europe/', '')
+                    .replace('_', ' ')}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
 
-        {/* Save */}
-        <Pressable
-          accessibilityRole="button"
-          disabled={saving}
-          style={styles.primary}
-          onPress={() => {
-            void saveProfile();
-          }}
-        >
-          <Text style={styles.primaryText}>{saving ? 'Đang lưu…' : 'Lưu thay đổi'}</Text>
-        </Pressable>
+          {/* Message */}
+          {message !== '' && <Text style={styles.formMessage}>{message}</Text>}
 
-        {/* Logout */}
-        <Pressable
-          accessibilityRole="button"
-          style={styles.logoutButton}
-          onPress={() => {
-            void logout();
-          }}
-        >
-          <Text style={styles.logoutText}>Đăng xuất</Text>
-        </Pressable>
+          {/* Save */}
+          <Pressable
+            accessibilityRole="button"
+            disabled={saving}
+            style={styles.primary}
+            onPress={() => {
+              void saveProfile();
+            }}
+          >
+            <Text style={styles.primaryText}>{saving ? 'Đang lưu…' : 'Lưu thay đổi'}</Text>
+          </Pressable>
 
-        <StatusBar style="dark" />
-      </ScrollView>
+          {/* Logout */}
+          <Pressable
+            accessibilityRole="button"
+            style={styles.logoutButton}
+            onPress={() => {
+              void logout();
+            }}
+          >
+            <Text style={styles.logoutText}>Đăng xuất</Text>
+          </Pressable>
+
+          <StatusBar style="dark" />
+        </ScrollView>
+      </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.eyebrow}>EQUA</Text>
-      <Text style={styles.title}>
-        {mode === 'signup'
-          ? 'Split without the group chat chase.'
-          : mode === 'login'
-            ? 'Welcome back.'
-            : 'Reset your password.'}
-      </Text>
-      <View style={styles.tabs}>
-        {(['signup', 'login', 'forgot'] as const).map((item) => (
-          <Pressable
-            key={item}
-            onPress={() => setMode(item)}
-            style={[styles.tab, mode === item && styles.activeTab]}
-          >
-            <Text style={[styles.tabText, mode === item && styles.activeText]}>
-              {item === 'signup' ? 'Sign up' : item === 'login' ? 'Log in' : 'Reset'}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      {mode === 'signup' && (
-        <TextInput
-          style={styles.input}
-          placeholder="Display name"
-          value={name}
-          onChangeText={setName}
-        />
-      )}
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-      {mode !== 'forgot' && (
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-      )}
-      <Pressable
-        accessibilityRole="button"
-        disabled={loading}
-        style={styles.primary}
-        onPress={() => {
-          void submit();
-        }}
-      >
-        <Text style={styles.primaryText}>
-          {loading
-            ? 'Please wait…'
-            : mode === 'signup'
-              ? 'Create account'
-              : mode === 'login'
-                ? 'Log in'
-                : 'Send reset link'}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled">
+        <Text style={styles.eyebrow}>EQUA</Text>
+        <Text style={styles.title}>
+          {mode === 'signup'
+            ? 'Cùng quản lý khoản chi chung.'
+            : mode === 'login'
+              ? 'Chào mừng trở lại.'
+              : 'Đặt lại mật khẩu.'}
         </Text>
-      </Pressable>
-      <StatusBar style="dark" />
-    </View>
+        <View style={styles.tabs}>
+          {(['signup', 'login', 'forgot'] as const).map((item) => (
+            <Pressable
+              key={item}
+              accessibilityRole="button"
+              accessibilityState={{ selected: mode === item }}
+              onPress={() => setMode(item)}
+              style={[styles.tab, mode === item && styles.activeTab]}
+            >
+              <Text style={[styles.tabText, mode === item && styles.activeText]}>
+                {item === 'signup' ? 'Đăng ký' : item === 'login' ? 'Đăng nhập' : 'Quên mật khẩu'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        {mode === 'signup' && (
+          <TextInput
+            style={styles.input}
+            accessibilityLabel="Tên hiển thị"
+            placeholder="Tên hiển thị"
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+            returnKeyType="next"
+          />
+        )}
+        <TextInput
+          style={styles.input}
+          accessibilityLabel="Email"
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+        />
+        {mode !== 'forgot' && (
+          <TextInput
+            style={styles.input}
+            accessibilityLabel="Mật khẩu"
+            placeholder="Mật khẩu"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+          />
+        )}
+        <Pressable
+          accessibilityRole="button"
+          disabled={loading}
+          style={styles.primary}
+          onPress={() => {
+            void submit();
+          }}
+        >
+          <Text style={styles.primaryText}>
+            {loading
+              ? 'Đang xử lý…'
+              : mode === 'signup'
+                ? 'Tạo tài khoản'
+                : mode === 'login'
+                  ? 'Đăng nhập'
+                  : 'Gửi liên kết đặt lại'}
+          </Text>
+        </Pressable>
+        <StatusBar style="dark" />
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+function MainNavigation({
+  activeTab,
+  onSelect,
+}: {
+  activeTab: AppTab;
+  onSelect: (tab: AppTab) => void;
+}) {
+  const tabs: Array<{ id: AppTab; label: string }> = [
+    { id: 'home', label: 'Tổng quan' },
+    { id: 'friends', label: 'Bạn bè' },
+    { id: 'groups', label: 'Nhóm' },
+    { id: 'expenses', label: 'Khoản chi' },
+    { id: 'profile', label: 'Hồ sơ' },
+  ];
+  return (
+    <ScrollView
+      horizontal
+      contentContainerStyle={styles.navigation}
+      showsHorizontalScrollIndicator={false}
+      accessibilityLabel="Điều hướng Equa"
+    >
+      {tabs.map((tab) => (
+        <Pressable
+          key={tab.id}
+          accessibilityRole="button"
+          accessibilityState={{ selected: activeTab === tab.id }}
+          onPress={() => onSelect(tab.id)}
+          style={[styles.navigationTab, activeTab === tab.id && styles.navigationTabActive]}
+        >
+          <Text
+            style={[styles.navigationText, activeTab === tab.id && styles.navigationTextActive]}
+          >
+            {tab.label}
+          </Text>
+        </Pressable>
+      ))}
+    </ScrollView>
   );
 }
 
@@ -770,8 +951,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  appShell: { flex: 1, backgroundColor: '#FAF6F0' },
   container: { flex: 1, backgroundColor: '#FAF6F0' },
+  authContent: { flexGrow: 1, justifyContent: 'center', padding: 28, paddingBottom: 50 },
   scrollContent: { padding: 28, paddingBottom: 60 },
+  navigation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#DDC9B6',
+    backgroundColor: '#FFFDFB',
+  },
+  navigationTab: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 18 },
+  navigationTabActive: { backgroundColor: '#E4F1EB' },
+  navigationText: { color: '#71645B', fontSize: 12, fontWeight: '700' },
+  navigationTextActive: { color: '#287A62' },
   eyebrow: { color: '#8A4637', fontWeight: '800', letterSpacing: 2, marginTop: 20 },
   title: {
     marginTop: 16,

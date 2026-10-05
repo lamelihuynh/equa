@@ -44,6 +44,7 @@ describe('mobile authentication and session persistence', () => {
       const api = createMobileAuthApi('https://identity.test/v1');
       await api.login('one@example.test', 'password');
       await api.refresh('refresh');
+      await api.logout('refresh');
       expect(fetchMock).toHaveBeenNthCalledWith(
         1,
         'https://identity.test/v1/auth/login',
@@ -57,6 +58,14 @@ describe('mobile authentication and session persistence', () => {
       expect(fetchMock).toHaveBeenNthCalledWith(
         2,
         'https://identity.test/v1/auth/refresh',
+        expect.objectContaining({
+          headers: { 'Content-Type': 'application/json', 'X-Equa-Client': 'mobile' },
+          body: JSON.stringify({ refreshToken: 'refresh' }),
+        }),
+      );
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        3,
+        'https://identity.test/v1/auth/logout',
         expect.objectContaining({
           headers: { 'Content-Type': 'application/json', 'X-Equa-Client': 'mobile' },
           body: JSON.stringify({ refreshToken: 'refresh' }),
@@ -124,10 +133,25 @@ describe('mobile authentication and session persistence', () => {
     const epoch = session.begin();
     const save = session.save(tokens('old', 'old-refresh'), epoch);
     await vi.waitFor(() => expect(releaseAccess).toBeDefined());
-    const logout = session.clear();
+    const logout = session.logout();
     releaseAccess?.();
     await expect(save).resolves.toBe(false);
-    await logout;
+    await expect(logout).resolves.toBe(true);
+    expect(values.get('equa_access_token')).toBeUndefined();
+    expect(values.get('equa_refresh_token')).toBeUndefined();
+  });
+
+  it('clears SecureStore locally even when server-side logout is unavailable', async () => {
+    const revoke = vi.fn().mockRejectedValue(new Error('network unavailable'));
+    const session = new SessionManager({
+      refresh: () => Promise.resolve(tokens('unused', 'unused')),
+      logout: revoke,
+    });
+    const epoch = session.begin();
+    await session.save(tokens('access', 'refresh'), epoch);
+
+    await expect(session.logout()).resolves.toBe(false);
+    expect(revoke).toHaveBeenCalledWith('refresh');
     expect(values.get('equa_access_token')).toBeUndefined();
     expect(values.get('equa_refresh_token')).toBeUndefined();
   });

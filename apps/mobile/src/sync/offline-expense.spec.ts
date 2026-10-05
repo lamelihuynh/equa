@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { createOfflineExpenseOperation, createOfflineOperationId } from './offline-expense';
+import {
+  createOfflineExpenseDeleteOperation,
+  createOfflineExpenseOperation,
+  createOfflineOperationId,
+} from './offline-expense';
 
 const base = {
   operationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -55,5 +59,54 @@ describe('offline expense operation', () => {
     expect(createOfflineOperationId()).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
+  });
+
+  it('builds a version-checked soft-delete operation from cached expense data', () => {
+    const operation = createOfflineExpenseDeleteOperation({
+      operationId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      createdAt: '2026-10-05T00:00:00.000Z',
+      expense: {
+        id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        version: 2,
+        ownerId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        payerId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        amountMinor: '50000',
+        currency: 'VND',
+        description: 'Lunch',
+        categoryId: null,
+        friendId: null,
+        groupId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        participants: [{ userId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', shareMinor: '50000' }],
+      },
+    });
+    expect(operation.expectedVersion).toBe(2);
+    expect(operation.payload).toMatchObject({
+      action: 'delete',
+      expenseId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      expectedVersion: 2,
+      state: 'DELETED',
+    });
+  });
+
+  it('does not queue a delete for a create that has not reached the server', () => {
+    expect(() =>
+      createOfflineExpenseDeleteOperation({
+        operationId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        createdAt: '2026-10-05T00:00:00.000Z',
+        expense: {
+          id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+          version: 0,
+          ownerId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          payerId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          amountMinor: '50000',
+          currency: 'VND',
+          description: 'Lunch',
+          categoryId: null,
+          friendId: null,
+          groupId: null,
+          participants: [{ userId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', shareMinor: '50000' }],
+        },
+      }),
+    ).toThrow('chưa được đồng bộ');
   });
 });

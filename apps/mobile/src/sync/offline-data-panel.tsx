@@ -1,19 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Network from 'expo-network';
 
 import { SUPPORTED_CURRENCIES, type SupportedCurrency } from '@equa/contracts';
 
 import type { LocalStore } from '../db/local-store';
+import { humanIdentityLabel } from '../identity-label';
 import type { SyncClient } from './sync-client';
-import { createOfflineExpenseOperation, createOfflineOperationId } from './offline-expense';
+import {
+  createOfflineExpenseDeleteOperation,
+  createOfflineExpenseOperation,
+  createOfflineOperationId,
+} from './offline-expense';
 
 interface CachedGroup {
   id: string;
   name: string;
   type: string;
   imageUrl: string | null;
-  members: Array<{ userId: string; role: 'admin' | 'member' }>;
+  members: Array<{ userId: string; role: 'admin' | 'member'; label: string }>;
 }
 
 interface CachedExpense {
@@ -38,6 +43,7 @@ interface OfflineDataPanelProps {
   store: LocalStore | null;
   sync: SyncClient | null;
   accessToken: (refresh?: boolean) => Promise<string | null>;
+  userLabels?: Record<string, string>;
 }
 
 export function OfflineDataPanel({
@@ -46,6 +52,7 @@ export function OfflineDataPanel({
   store,
   sync,
   accessToken,
+  userLabels = {},
 }: OfflineDataPanelProps) {
   const tokenProvider = useRef(accessToken);
   const refreshInFlight = useRef(false);
@@ -272,6 +279,33 @@ export function OfflineDataPanel({
     }
   }
 
+  function confirmOfflineDelete(expense: CachedExpense): void {
+    Alert.alert('Xóa khoản chi?', 'Thao tác sẽ đồng bộ lên máy chủ khi có mạng.', [
+      { text: 'Hủy', style: 'cancel' },
+      { text: 'Xóa', style: 'destructive', onPress: () => void deleteOfflineExpense(expense) },
+    ]);
+  }
+
+  async function deleteOfflineExpense(expense: CachedExpense): Promise<void> {
+    if (!store || expense.pending || expense.version < 1) return;
+    setError('');
+    try {
+      const deviceId = await store.primaryDevice(ownerId);
+      if (!deviceId) throw new Error('Không tìm thấy thiết bị đồng bộ.');
+      const operation = createOfflineExpenseDeleteOperation({
+        operationId: createOfflineOperationId(),
+        createdAt: new Date().toISOString(),
+        expense,
+      });
+      await store.mutate(ownerId, deviceId, operation);
+      setMessage('Đã xóa trên thiết bị; hàng đợi sẽ đồng bộ khi có mạng.');
+      await loadLocal();
+      void sync?.flush(ownerId).catch(() => undefined);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Không thể xóa khoản chi ngoại tuyến.');
+    }
+  }
+
   const visibleExpenses = expenses.filter((expense) => expense.state !== 'DELETED');
   return (
     <View style={styles.panel}>
@@ -322,6 +356,13 @@ export function OfflineDataPanel({
             disabled={expense.pending || expense.version < 1}
           >
             <Text style={styles.secondaryButtonText}>Sửa</Text>
+          </Pressable>
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={() => confirmOfflineDelete(expense)}
+            disabled={expense.pending || expense.version < 1}
+          >
+            <Text style={styles.secondaryButtonText}>Xóa</Text>
           </Pressable>
         </View>
       ))}
@@ -388,7 +429,9 @@ export function OfflineDataPanel({
                 disabled={userId === ownerId}
               >
                 <Text style={styles.rowText}>
-                  {userId === ownerId ? '✓ Bạn' : `${userId in shares ? '✓' : '□'} ${userId}`}
+                  {userId === ownerId
+                    ? '✓ Bạn'
+                    : `${userId in shares ? '✓' : '□'} ${userLabels[userId] ?? groups.find((group) => group.id === groupId)?.members.find((member) => member.userId === userId)?.label ?? 'Người dùng Equa'}`}
                 </Text>
               </Pressable>
               {userId in shares ? (
@@ -442,14 +485,22 @@ function parseGroup(value: unknown): CachedGroup | undefined {
   };
 }
 
-function parseMember(value: unknown): { userId: string; role: 'admin' | 'member' } | undefined {
+function parseMember(
+  value: unknown,
+): { userId: string; role: 'admin' | 'member'; label: string } | undefined {
   if (
     !isRecord(value) ||
     typeof value.userId !== 'string' ||
     (value.role !== 'admin' && value.role !== 'member')
   )
     return undefined;
-  return { userId: value.userId, role: value.role };
+  const identity = isRecord(value.user) ? value.user : undefined;
+  const label = humanIdentityLabel({
+    displayName: typeof identity?.displayName === 'string' ? identity.displayName : undefined,
+    email: typeof identity?.email === 'string' ? identity.email : undefined,
+    username: typeof identity?.username === 'string' ? identity.username : undefined,
+  });
+  return { userId: value.userId, role: value.role, label };
 }
 
 function parseExpense(value: unknown, ownerId: string): Omit<CachedExpense, 'pending'> | undefined {

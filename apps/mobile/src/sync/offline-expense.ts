@@ -55,6 +55,50 @@ export function createOfflineExpenseOperation(draft: OfflineExpenseDraft): SyncO
   };
 }
 
+export function createOfflineExpenseDeleteOperation(input: {
+  operationId: string;
+  createdAt: string;
+  expense: {
+    id: string;
+    version: number;
+    ownerId: string;
+    payerId: string;
+    amountMinor: string;
+    currency: SupportedCurrency;
+    description: string;
+    categoryId: string | null;
+    friendId: string | null;
+    groupId: string | null;
+    participants: Array<{ userId: string; shareMinor: string }>;
+  };
+}): SyncOperation {
+  if (!Number.isSafeInteger(input.expense.version) || input.expense.version < 1)
+    throw new Error('Không thể xóa khoản chi chưa được đồng bộ lên máy chủ.');
+  return {
+    id: input.operationId,
+    entity: 'expense',
+    entityId: input.expense.id,
+    expectedVersion: input.expense.version,
+    createdAt: input.createdAt,
+    payload: {
+      action: 'delete',
+      expenseId: input.expense.id,
+      amountMinor: input.expense.amountMinor,
+      currency: input.expense.currency,
+      description: input.expense.description,
+      payerId: input.expense.payerId,
+      participants: input.expense.participants,
+      categoryId: input.expense.categoryId,
+      friendId: input.expense.friendId,
+      groupId: input.expense.groupId,
+      expectedVersion: input.expense.version,
+      ownerId: input.expense.ownerId,
+      state: 'DELETED',
+      version: input.expense.version + 1,
+    },
+  };
+}
+
 export function createOfflineOperationId(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
   const chars = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';

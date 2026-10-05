@@ -10,6 +10,7 @@ const AUTH_REQUEST_TIMEOUT_MS = 15_000;
 
 export interface MobileAuthApi extends SessionApi {
   login(email: string, password: string): Promise<TokenPair>;
+  logout(refreshToken: string): Promise<void>;
 }
 
 /** Identity only includes a refresh token in its JSON response for this client. */
@@ -48,6 +49,28 @@ export function createMobileAuthApi(baseUrl: string): MobileAuthApi {
   return {
     login: (email, password) => requestTokens('login', { email, password }),
     refresh: (refreshToken) => requestTokens('refresh', { refreshToken }),
+    logout: async (refreshToken) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
+      try {
+        const response = await fetch(`${baseUrl}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Equa-Client': 'mobile',
+          },
+          body: JSON.stringify({ refreshToken }),
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('Identity could not revoke the session.');
+      } catch (error) {
+        if (controller.signal.aborted)
+          throw new Error('Identity logout request timed out.', { cause: error });
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
   };
 }
 

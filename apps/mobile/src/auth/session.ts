@@ -11,6 +11,7 @@ export interface TokenPair {
 }
 export interface SessionApi {
   refresh(refreshToken: string): Promise<TokenPair>;
+  logout?(refreshToken: string): Promise<void>;
 }
 
 export class SessionManager {
@@ -34,6 +35,10 @@ export class SessionManager {
 
   isCurrent(epoch: number): boolean {
     return epoch === this.generation;
+  }
+
+  currentEpoch(): number {
+    return this.generation;
   }
 
   async save(tokens: TokenPair, epoch = this.generation): Promise<boolean> {
@@ -72,6 +77,30 @@ export class SessionManager {
     this.generation += 1;
     this.refreshBlocked = true;
     await this.deleteStoredTokens();
+  }
+  async logout(): Promise<boolean> {
+    this.generation += 1;
+    this.refreshBlocked = true;
+    await this.persistence;
+    let refreshToken: string | null = null;
+    try {
+      refreshToken = await SecureStore.getItemAsync(refreshKey);
+    } catch {
+      // Local sign-out still proceeds if the secure store cannot be read.
+    }
+    let cleared = true;
+    try {
+      await this.deleteStoredTokens();
+    } catch {
+      cleared = false;
+    }
+    if (!refreshToken || !this.api.logout) return cleared;
+    try {
+      await this.api.logout(refreshToken);
+      return cleared;
+    } catch {
+      return false;
+    }
   }
   private async deleteStoredTokens(): Promise<void> {
     await this.enqueue(async () => {
