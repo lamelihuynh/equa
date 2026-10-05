@@ -17,10 +17,11 @@ Chrome through Kong against the local Identity/Social/Ledger/PostgreSQL stack.
 2. On `/friends`, send a request to an existing email/username. Sign in as the target
    account, accept it, then verify both sessions show `FRIEND`. Remove it only when
    Ledger reports no outstanding debt.
-3. On `/groups`, create a group and verify its creator is `ADMIN`. Invite by email or
-   link; share the returned invitation code with the recipient. The recipient enters
-   the code on `/groups` to accept. Verify the member list, edit group details, and
-   remove a member only after outstanding group debt is resolved.
+3. On `/groups`, create a group and verify its creator is `ADMIN`. Invite a registered
+   member by email from group detail. The invitation appears in that member's pending
+   invitations on `/groups` and an email is sent to local Mailpit. Accept or decline
+   in the app; no code is copied or pasted. Verify the member list, edit group details,
+   and remove a member only after outstanding group debt is resolved.
 4. On `/expenses`, select a group or friend, choose payer and participants, enter each
    participant's explicit share, and create the expense. Ledger requires shares to sum
    to the integer minor-unit amount. Client mutation keys are reused for an identical
@@ -35,13 +36,19 @@ Chrome through Kong against the local Identity/Social/Ledger/PostgreSQL stack.
 
 ## Current limitations
 
-- The Web displays Social user IDs because current public friend/group-member contracts
-  do not provide display names. It does not call Identity's internal resolver.
+- Social enriches friend, request, and group-member responses through Identity's batched
+  internal resolver; Social does not read the Identity database. The Web uses display name,
+  then email, and falls back to a generic Equa user label if Identity is unavailable.
 - Admin group dissolution is available in API mode. Dissolving a group currently makes
   its linked Ledger expenses unreadable under membership authorization; post-dissolution
   history visibility remains unspecified.
 - Friend pair balances are displayed. Group balance, settlement, and named split modes
-  are not implemented by this Web flow. Notification provider delivery is disabled.
+  are not implemented by this Web flow.
+- Local group invitation delivery uses the Mailpit SMTP provider when
+  `EMAIL_PROVIDER=mailpit`. Social commits the invitation and notification outbox event
+  together. A broker or SMTP failure leaves the pending invitation available in the app;
+  the outbox and notification worker retry delivery independently. Other provider values
+  leave notification delivery disabled. Production provider delivery is not claimed.
 - `Local Demo` is browser persistence and never represents server data.
 
 ## Phase 10 browser evidence

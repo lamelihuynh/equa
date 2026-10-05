@@ -52,8 +52,12 @@ their retry policy is exhausted. Rabbit connection retries use exponential delay
 seconds. Inspect worker diagnostics and the `equa.notification.dlq` queue before considering any
 manual replay. A replay must preserve the original event ID/idempotency identity.
 
-The current provider is intentionally disabled. No external notification delivery is demonstrated
-or configured by this repository.
+For local group invitations, `EMAIL_PROVIDER=mailpit` enables SMTP delivery using `SMTP_HOST`,
+`SMTP_PORT`, and `EMAIL_FROM`. Social persists the invitation and its RabbitMQ outbox event in
+one Social database transaction. If RabbitMQ is unavailable, the pending invitation remains
+visible in Social and the outbox retries publication. If SMTP delivery fails, the Notification
+job retries independently; neither failure rolls back the invitation. Other provider values keep
+delivery disabled. No production provider delivery is demonstrated or claimed.
 
 ## Backup, restore, and release limits
 

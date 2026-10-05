@@ -5,8 +5,10 @@
 **Phase 10 local integration: PASS for the scenarios listed below.** Docker Desktop 29.5.2
 and Compose 5.1.3 were available. The pre-existing Equa Compose services were healthy;
 the unrelated `oc-hem-postgres` container was left untouched. This manual run is not an
-automated CI/Testcontainers suite or production-environment evidence. Notification
-provider delivery, native Expo/device, staging, and backup/restore remain **NOT RUN**.
+automated CI/Testcontainers suite or production-environment evidence. Local Mailpit delivery
+for group invitations was separately verified through the API-mode Web flow. Live retry after
+an observed SMTP failure, production provider delivery, native Expo/device, staging, and
+backup/restore remain **NOT RUN**.
 
 ## Phase 10 execution record
 
@@ -49,6 +51,10 @@ absent from the Equa PostgreSQL server.
 | Multi-recipient Notification store and replay                                           | PASS; direct PostgreSQL store probe for synthetic event 46736790-6397-435b-8187-0620a768d247 inserted two recipient jobs; replay returned `duplicate` and the database retained exactly two owners. This verifies store fan-out/idempotency, not a multi-recipient Rabbit publish.          |
 | API-mode Chrome Web flow                                                                | PASS; real login/friends-balance/groups/expense create-edit-delete/dashboard/profile flow and separate group image/edit/dissolve flow; zero browser page errors.                                                                                                                            |
 
+The separate group-invitation acceptance covered the pending UI, accept/decline, one Mailpit
+email with inviter/group details and no code, and invitation persistence while Mailpit was
+unavailable. Delivery retry after SMTP recovery was not observed.
+
 The first real Ledger expense write exposed an invalid NUL byte in the PostgreSQL advisory-lock
 text key. The key now uses an unambiguous JSON-encoded string pair; its regression test passes and
 the live PostgreSQL create/idempotency flow passes.
@@ -85,8 +91,10 @@ tests or browser run as native-device evidence.
 
 1. Register two users through Identity and verify their addresses through local Mailpit.
 2. Send a Social friend request from the first account and accept it from the second.
-3. Create a group, invite the second account, and accept the returned link/email invitation
-   code. Verify membership and admin authorization through the public Social APIs.
+3. Create a group, invite the second account by email, verify the pending invitation appears
+   in the invitee's `/groups` page and in local Mailpit, then accept or decline in the app.
+   No invitation code is copied or pasted. Verify membership and admin authorization through
+   the public Social APIs.
 4. Create a Ledger group expense with explicit integer minor-unit participant shares that
    sum to the amount. Read it and its total as a member, edit with `expectedVersion`, then
    soft-delete with an `Idempotency-Key`; verify duplicate requests do not create a second
@@ -95,9 +103,12 @@ tests or browser run as native-device evidence.
    a stale-version operation. Verify the receipt is idempotent, the conflict blocks later
    device operations, and an authenticated explicit discard releases the sequence.
 6. Confirm Ledger publishes its outbox event and Notification persists one inbox/job for
-   that event. The provider is disabled, so this proves ingestion only, not delivery. A
-   read-only inspection of `equa_notification` is allowed for the test operator; service
-   code must continue to access only its own database.
+   that event. For group email invitations, confirm Social commits the invitation/outbox
+   together, Notification persists one recipient job, and the local Mailpit provider delivers
+   it. If the broker or SMTP provider is unavailable, the pending invitation remains visible
+   and delivery retries; neither failure rolls back invitation state. Mailpit validates local
+   delivery only, not a production provider. A read-only inspection of `equa_notification` is
+   allowed for the test operator; service code must continue to access only its own database.
 7. Verify Web displays the Gateway-backed group/expense state. For offline persistence,
    run the Mobile SQLite unit suite; do not call it a native/device run.
 

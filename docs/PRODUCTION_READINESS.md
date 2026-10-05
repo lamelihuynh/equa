@@ -1,6 +1,6 @@
 # Equa V1 production readiness
 
-Assessment snapshot: 2026-09-29, branch feature/automation-sync. This is a repository and local-runtime assessment, not production approval or deployment.
+Assessment snapshot: 2026-10-05, branch `staging/demo` (local, not pushed). This is a repository, local-runtime, and read-only partial-staging assessment, not production approval or deployment.
 
 ## Decision
 
@@ -18,8 +18,8 @@ Assessment snapshot: 2026-09-29, branch feature/automation-sync. This is a repos
 | Financial correctness   | NOT READY                         | Real local PostgreSQL create/replay/edit/stale-conflict/soft-delete/history/totals/outbox passed. Friend/member debt check and removal are separate service calls without cross-service atomicity; exhaustive race stress and settlement remain unresolved.  |
 | Service architecture    | READY WITH EXTERNAL CONFIGURATION | Service-owned databases and HTTP boundaries were exercised locally. Production network isolation, service-key distribution, and private connectivity need environment verification.                                                                          |
 | Sync correctness        | NOT READY                         | SQLite cache/outbox and conflict logic have disk/unit tests; Mobile profile now provides cached group/expense view plus offline create/edit. Live Automation replay/conflict/discard passed, but native reconnect/account-switch behavior is NOT RUN.        |
-| Notifications           | NOT READY                         | Live Ledger/Rabbit ingestion persisted recipient-specific jobs for a newly added expense participant and deduplicated create replay. Debt reminders and settlement notices remain blocked; the delivery provider is disabled.                                |
-| Web                     | READY WITH EXTERNAL CONFIGURATION | Real API-mode flow passed in headless Chrome through Kong. Staging Gateway/upstreams and external deployment configuration remain absent.                                                                                                                    |
+| Notifications           | NOT READY                         | Local Mailpit delivery is implemented for group invitations. Earlier local Ledger/Rabbit expense-job ingestion and replay deduplication were verified. No production email provider is configured; debt reminders and settlement notices remain blocked.     |
+| Web                     | READY WITH EXTERNAL CONFIGURATION | Local API-mode flow passed in headless Chrome through Kong. The staging Web domain resolves to Vercel and returns HTTP 200; project settings, API health, and full backend upstreams are not verified.                                                       |
 | Quality and CI          | READY WITH EXTERNAL CONFIGURATION | Repository-wide Prettier, workspace tests/lint/typecheck/build, actionlint, scaffold, Compose, affected-component checks, GitHub CI, and Security/CodeQL pass on PR #18. Automated isolated PostgreSQL/RabbitMQ E2E and native-device CI remain unavailable. |
 | Operations and recovery | NOT READY                         | Local migrations and the scoped scenario passed. Production staging beyond Identity, backup/PITR, restore drill, queue alerts, and rollback evidence are absent.                                                                                             |
 | Security                | NOT READY                         | JWT/service guards, Kong limits, redacted API logs, CodeQL/Dependabot configuration and non-root containers exist. Rotation, dependency/image scanning, DAST, workload identity and production policy remain unverified.                                     |

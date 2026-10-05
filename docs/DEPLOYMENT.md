@@ -2,27 +2,30 @@
 
 ## Pipeline hiện có
 
-- `ci.yml` chạy trên pull request và push lên `main`/`develop`: kiểm tra repository,
+- `ci.yml` chạy trên pull request và push lên `main`/`develop`/`staging/demo`: kiểm tra repository,
   chỉ chạy quality cho component bị ảnh hưởng, rồi dựng Compose infrastructure smoke test.
 - `component-quality.yml` chạy build, lint, typecheck, test và coverage nếu component có script đó.
-- `security.yml` chạy CodeQL trên pull request, `main`/`develop` và lịch hằng tuần.
+- `security.yml` chạy CodeQL trên pull request, `main`/`develop`/`staging/demo` và lịch hằng tuần.
 - `release-images.yml` xuất bản các image deployable trong `.github/components.json` lên GHCR
   khi chạy tay hoặc push tag `v*`.
 - `deploy-staging.yml` nhận push lên nhánh staging đã chọn bằng variable `STAGING_BRANCH`
   (mặc định `develop`). Chỉ component có target trong manifest mới được deploy; hiện chỉ Identity
-  có deploy hook và HTTP smoke check.
+  có deploy hook và HTTP smoke check. Nhánh `staging/demo` bị loại khỏi workflow hook cũ và dùng
+  Render Blueprint riêng sau khi inventory/chi phí được duyệt.
 
-Không có production deploy workflow trong repository. Staging hiện mới cấu hình Identity; không
-suy ra Web, Social, Ledger, Automation & Sync, Platform hay Notification đã được deploy.
+Không có production deploy workflow trong repository. DNS Web/API hiện tham chiếu Vercel và một
+Render Gateway cũ; Web trả HTTP 200 nhưng cấu hình project, API health và các backend upstream chưa
+được xác nhận. Workflow legacy chỉ có target Identity; Blueprint đầy đủ chưa được sync. Không suy
+ra Social, Ledger, Automation & Sync, hay Notification đã được triển khai.
 
 ## Môi trường
 
-| Environment | Dữ liệu               | Trigger hiện tại                                 | Trạng thái                                                       |
-| ----------- | --------------------- | ------------------------------------------------ | ---------------------------------------------------------------- |
-| Local       | Compose, dữ liệu giả  | Developer                                        | Có cấu hình local                                                |
-| CI          | Ephemeral             | Pull request; push `main`/`develop`              | Quality theo component bị ảnh hưởng và infrastructure smoke test |
-| Staging     | Managed, dữ liệu giả  | Push nhánh `STAGING_BRANCH` (mặc định `develop`) | Identity có deploy target; các component khác chưa được cấu hình |
-| Production  | Managed, dữ liệu thật | Chưa có workflow                                 | Cần quyết định hạ tầng và quy trình trước khi triển khai         |
+| Environment | Dữ liệu               | Trigger hiện tại                                                                | Trạng thái                                                       |
+| ----------- | --------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Local       | Compose, dữ liệu giả  | Developer                                                                       | Có cấu hình local                                                |
+| CI          | Ephemeral             | Pull request; push `main`/`develop`/`staging/demo`                              | Quality theo component bị ảnh hưởng và infrastructure smoke test |
+| Staging     | Managed, dữ liệu giả  | Legacy: `STAGING_BRANCH` (mặc định `develop`); demo: Render Blueprint candidate | Identity có legacy deploy target; full demo chưa được cấu hình   |
+| Production  | Managed, dữ liệu thật | Chưa có workflow                                                                | Cần quyết định hạ tầng và quy trình trước khi triển khai         |
 
 Khi cấu hình thêm component, mỗi staging target cần secret/database credentials riêng và smoke check
 phù hợp. Không dùng chung database, bucket, queue hoặc signing key giữa staging và production.
