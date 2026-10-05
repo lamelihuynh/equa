@@ -6,20 +6,21 @@ inventory and the paid-resource estimate are reviewed and approved.
 
 ## Current external state (2026-10-05)
 
-- `https://staging.equa.io.vn` resolves to Vercel and returned HTTP 200 in a read-only
-  probe. This does not verify the Vercel project settings, deployed commit, API mode, or
-  browser flows.
-- `api-staging.equa.io.vn` resolves to the existing Render hostname
-  `equa-kong-staging.onrender.com`. The existing GitHub `staging` environment still has
-  `STAGING_API_BASE_URL=https://equa-kong-staging.onrender.com` and the legacy Identity
-  deploy-hook secret. Gateway/API health was not verified in this pass.
+- `https://staging.equa.io.vn` resolves to Vercel and returned HTTP 200. Vercel CLI is
+  authenticated to a Hobby scope with no Equa project or `staging.equa.io.vn` domain. Do
+  not create a duplicate project or reassign the domain without its current owner's approval.
+- `api-staging.equa.io.vn` resolves to `equa-kong-staging.onrender.com`; a read-only
+  `/health` probe timed out. Render CLI is authenticated to workspace `equa`, whose project,
+  service, Postgres, and Key Value lists are empty. The DNS target may belong to another
+  workspace or be stale. The existing GitHub `staging` environment still has the legacy
+  smoke URL and Identity deploy-hook secret name; its value was not read.
 - The local `staging/demo` branch now has the validated application/config commits; the
   remote branch is still absent. `STAGING_BRANCH` is unset at repository and `staging`
   environment scope, so the legacy deploy workflow defaults to `develop`. CI and CodeQL
   include `staging/demo`; the legacy Identity hook workflow explicitly excludes it.
-- The candidate Blueprint uses new `equa-staging-demo-*` names, including a new gateway
-  name. This prevents a Blueprint sync from silently taking over `equa-kong-staging`.
-  Reassigning the existing API hostname requires an authorized Render review.
+- The candidate Blueprint groups resources under Project `equa-staging-demo`, Environment
+  `staging`, with unique `equa-staging-demo-*` names. Reassigning the existing API hostname
+  requires confirmation from its current owner.
 
 ## Proposed topology
 
@@ -114,28 +115,33 @@ Postgres, Redis, or any production resource.
 
 `pnpm install --frozen-lockfile`, Web and backend package builds, the Compose config check,
 and the staging Kong Docker build passed locally. The Render Blueprint passed the public
-Render JSON Schema and local service/database/group-reference checks. Render CLI semantic
-validation remains pending workspace login. The shared Node Docker build passed for
-Identity; attempts for the other package variants stopped before build execution when
-Docker Hub manifest requests timed out. These services use native Node builds in the
-candidate Render Blueprint. Full public API health, Render/Vercel settings, migrations,
-and public E2E remain unverified.
+Render JSON Schema and local project/environment service/database/group-reference checks.
+Render CLI validation reports `need_payment_info` for its six compute services, Postgres,
+and Key Value. The shared Node Docker build passed for Identity; attempts for the other
+package variants stopped before build execution when Docker Hub manifest requests timed out.
+These services use native Node builds in the candidate Render Blueprint. Full public API
+health, Render/Vercel settings, migrations, and public E2E remain unverified.
 
 ## Deployment sequence after the gates
 
-1. Sign in to Render and Vercel; inspect existing projects/resources and their ownership.
-2. Approve the recurring cost estimate or provide a lower-cost authorized topology.
-3. Configure CloudAMQP, Resend sender/API key, and S3-compatible avatar credentials via
+1. Identify the Render workspace/account that owns the current API hostname. The authenticated
+   `equa` workspace is empty; do not reassign the hostname until its owner/current state is
+   confirmed.
+2. Authorize the Vercel account/team containing the existing Equa project/domain. The current
+   authenticated Hobby scope has no Equa project; do not create a duplicate without approval.
+3. Review the paid Render resource estimate and explicitly approve any new resources before
+   provisioning.
+4. Configure CloudAMQP, Resend sender/API key, and S3-compatible avatar credentials via
    their dashboards and Render secrets. Do not send secrets in chat or commit them.
-4. After the gates, push the prepared `staging/demo` source and let CI/CodeQL finish before
+5. After the gates, push the prepared `staging/demo` source and let CI/CodeQL finish before
    Render deploys.
-5. Sync the unique-name Blueprint only after checking every resource diff. Create missing
+6. Sync the unique-name Blueprint only after checking every resource diff. Create missing
    logical databases additively; apply each service migration.
-6. Connect the existing API custom hostname only after verifying it can be reassigned
+7. Connect the existing API custom hostname only after verifying it can be reassigned
    without modifying the current service or data.
-7. Configure the existing Vercel project with root `apps/web`, the canonical API base,
+8. Configure the existing Vercel project with root `apps/web`, the canonical API base,
    and the staging avatar origin if avatars are tested.
-8. Verify Gateway routes, CORS, auth/cookies, private-service isolation, then run synthetic
+9. Verify Gateway routes, CORS, auth/cookies, private-service isolation, then run synthetic
    public E2E and technical staging tests. Publish `docs/PUBLIC_DEMO.md` only after those
    checks pass.
 

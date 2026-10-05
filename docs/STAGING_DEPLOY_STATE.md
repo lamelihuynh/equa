@@ -35,34 +35,31 @@ context excludes `.env`, reports, generated agent files, and TypeScript build-in
 
 ## External state observed
 
-- `https://staging.equa.io.vn` currently resolves to Vercel and returned HTTP 200. Vercel
-  project settings, deployed branch, API environment value, and public browser flow remain
-  unverified because Vercel CLI/token access is unavailable.
-- `api-staging.equa.io.vn` currently resolves to `equa-kong-staging.onrender.com`. The
-  existing GitHub staging environment points its legacy smoke variable at that Render
-  hostname and contains the legacy `RENDER_IDENTITY_DEPLOY_HOOK` secret name. The secret
-  value was not read. Public API health and Render resource ownership/configuration remain
-  unverified because Render access is unavailable.
+- `https://staging.equa.io.vn` resolves to Vercel and returned HTTP 200. Vercel CLI auth
+  succeeded in a Hobby scope that contains no Equa project or `staging.equa.io.vn` domain;
+  the current domain owner must grant access or confirm a new project/domain is authorized.
+- `api-staging.equa.io.vn` resolves to `equa-kong-staging.onrender.com`; a read-only
+  `/health` probe timed out. Render CLI auth succeeded in workspace `equa`, but its service,
+  project, Postgres, and Key Value listings are empty. The public CNAME may belong to another
+  workspace or be stale; do not reassign it without owner confirmation. The legacy GitHub
+  `RENDER_IDENTITY_DEPLOY_HOOK` secret name exists, but its value was not read.
 - `STAGING_BRANCH` is unset at repository and staging-environment scope; the legacy workflow
   defaults to `develop`. The candidate explicitly excludes `staging/demo` from that legacy
   Identity-only image/hook deployment.
-- GitHub CLI is authenticated and used only for read-only metadata. Render CLI v2.28.0 was
-  downloaded to a temporary directory and hash-verified, but no Render workspace is signed
-  in/selected, so Blueprint validation returned the workspace-selection error. Vercel CLI
-  and local Vercel auth are absent. Cloudflare, Resend, and CloudAMQP credentials are not
-  present in the local environment.
+- GitHub, Render, and Vercel CLIs are authenticated. Cloudflare, Resend, and CloudAMQP
+  credentials are not present in the local environment.
 
 ## Proposed resources and cost gate
 
-The candidate `render.yaml` uses new names (`equa-staging-demo-*`) to avoid taking over
-existing resources. It proposes six paid 0.5 CPU / 512 MB compute services, one 0.1 CPU /
-256 MB Postgres instance, and one 256 MB Key Value instance: about **USD 58/month** on a
-Render Hobby workspace, before bandwidth/build overages and tax. Render Pro adds USD 25/month
-and Vercel Pro USD 20/month if either account requires those plans; current plans are unknown.
-Existing Render resources might reduce incremental cost, but that cannot be established
-without authorized inventory. No paid resources were created. CloudAMQP Little Lemur, Resend
-Free, R2 free tier, and Vercel Hobby are candidates only; each requires account/ownership
-confirmation and may have usage or policy limits.
+The candidate `render.yaml` groups resources under Project `equa-staging-demo` and Environment
+`staging`, with unique `equa-staging-demo-*` names. It proposes six paid 0.5 CPU / 512 MB
+compute services, one 0.1 CPU / 256 MB Postgres instance, and one 256 MB Key Value instance:
+about **USD 58/month** on a Render Hobby workspace, before bandwidth/build overages and tax.
+Render CLI validation reports `need_payment_info` for those eight paid resources in the
+selected empty workspace. Render Pro adds USD 25/month and Vercel Pro USD 20/month if either
+plan is required; workspace ownership/current plans remain unverified for Equa. No payment
+method or resources were added. CloudAMQP Little Lemur, Resend Free, R2 free tier, and Vercel
+Hobby remain candidates pending account/ownership confirmation.
 
 ## Validation performed
 
@@ -76,10 +73,11 @@ confirmation and may have usage or policy limits.
 | Existing local Compose services                                     | Healthy; no restart/down/reset commands were run                                                                        |
 | Render Kong staging Docker image                                    | PASS                                                                                                                    |
 | Render Blueprint JSON Schema and local reference checks             | PASS                                                                                                                    |
-| Render CLI semantic Blueprint validation                            | NOT RUN; CLI requires Render login and workspace selection                                                              |
+| Render CLI semantic Blueprint validation                            | COST GATE: need_payment_info for six services, Postgres, and Key Value                                                  |
 | Shared Node Docker image                                            | PASS for Identity; other package variants could not resolve Docker Hub base-image metadata after TLS handshake timeouts |
 | Vercel custom Web URL                                               | HTTP 200; this does not validate current source/API-mode browser flow                                                   |
-| Render API health, migrations, public E2E                           | NOT RUN                                                                                                                 |
+| Render API `/health`                                                | TIMED OUT with no response; endpoint remains unverified                                                                 |
+| Staging migrations and public E2E                                   | NOT RUN                                                                                                                 |
 
 The Render Blueprint is candidate configuration only. The full Docker check for the shared
 Node Dockerfile and the Web Dockerfile remains unverified; the selected Render backend uses
@@ -87,11 +85,12 @@ native Node builds, and Web uses Vercel.
 
 ## Remaining gates and next actions
 
-1. Sign in to Render using the CLI/dashboard, select the workspace, and inspect all existing
-   services, databases, Key Value stores, domains, plans, and Blueprint links before any sync.
-2. Approve the estimated paid Render baseline or provide an authorized alternative.
-3. Sign in to the Vercel account that owns the current Web domain/project and confirm the
-   custom-domain, root-directory, and environment settings.
+1. Authorize the Render account/workspace containing the current public API hostname, or
+   confirm the CNAME is stale and the empty `equa` workspace is the intended target.
+2. Authorize the Vercel account/team containing the existing Equa project/domain, or confirm
+   that creating a new project and reassigning the domain is allowed.
+3. Review the paid-resource estimate and explicitly approve the required new resources before
+   provisioning; the current Render validator reports `need_payment_info` for all eight.
 4. Configure Resend verification mail, CloudAMQP RabbitMQ, and S3-compatible avatar secrets
    through provider dashboards; do not paste secret values into chat.
 5. Only then push the reviewed staging branch, wait for CI/CodeQL, sync the unique-name
