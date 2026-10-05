@@ -4,17 +4,17 @@ Updated: 2026-10-05. No credentials are recorded here.
 
 ## Current step
 
-Prepared and validated the zero-cost candidate topology and scoped source changes. Commits `637b2fd` (Web label regression test) and `a2536bc` (staging runtime/config) are local. No resources, migrations, deploys, DNS changes, or pushes have occurred. The documentation checkpoint is being finalized before the authorized normal push.
+Prepared and validated the zero-cost candidate topology and scoped source changes. Commits `637b2fd` (Web label regression test), `a2536bc` (staging runtime/config), and `89d18fc` (deployment documentation) are local. No resources, migrations, deploys, DNS changes, or pushes have occurred. The checkpoint status update is being finalized before the authorized normal push.
 
 ## Source and worktree
 
-| Item                     | Current state                                                                                                     |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Branch / source revision | `staging/demo` / `a2536bceb25469c70d488b98378c57a65ed335ba`                                                       |
-| Remote branch            | `origin/staging/demo` absent; `origin/feature/automation-sync` remains `0043ee64680a346eb816db05bb9ad52f1d46521c` |
-| Recent staging commits   | `637b2fd` Web label test; `a2536bc` Free topology and deployment support; prior app/docs commits remain ancestors |
-| Worktree                 | Staging docs are pending the checkpoint commit; reports and generated files remain excluded                       |
-| Push/merge/reset/clean   | Local commits made; no push, merge, reset, or clean performed                                                     |
+| Item                     | Current state                                                                                                        |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Branch / source revision | `staging/demo` / `a2536bceb25469c70d488b98378c57a65ed335ba`                                                          |
+| Remote branch            | `origin/staging/demo` absent; `origin/feature/automation-sync` remains `0043ee64680a346eb816db05bb9ad52f1d46521c`    |
+| Recent staging commits   | `637b2fd` Web label test; `a2536bc` Free topology; `89d18fc` deployment docs; earlier app/docs commits are ancestors |
+| Worktree                 | Checkpoint status update is pending; reports and generated files remain excluded                                     |
+| Push/merge/reset/clean   | Local commits made; no push, merge, reset, or clean performed                                                        |
 
 Do not stage `apps/web/AGENTS.md`, `apps/web/CLAUDE.md`, `apps/web/tsconfig.tsbuildinfo`, or `reports/weekly/**`.
 
@@ -59,8 +59,8 @@ Base monthly resource cost is **USD 0** within free-tier quotas. Render Free Web
 
 ## Next actions
 
-1. Commit the validated documentation checkpoint, excluding generated and report files.
-2. Push normally to `origin/staging/demo` and wait for CI/CodeQL.
+1. Commit the validated checkpoint status update, excluding generated and report files.
+2. Verify `origin/staging/demo` remains absent, push normally, and wait for CI/CodeQL.
 3. Before initial Blueprint sync, configure Resend with a verified sender and store its API key in Render secrets; do not paste the key into chat or docs.
 4. Create/connect the Vercel project to the exact GitHub repo/branch. If the personal-repository owner authorization is required, stop and request it; do not reassign existing domains.
 5. Set Render `WEB_ORIGIN` and `APP_WEB_URL` to the generated Vercel origin, then sync only the validated Free Blueprint after reviewing its complete resource diff. Never create or upgrade paid resources.
