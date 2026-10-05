@@ -3,6 +3,7 @@ import type { IncomingMessage } from 'node:http';
 
 import { config as loadEnv } from 'dotenv';
 import { join } from 'node:path';
+import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { jwtVerify } from 'jose';
 
@@ -19,6 +20,7 @@ import {
   type SocialLedgerAdapter,
 } from './ledger-adapter.js';
 import { SocialError } from './errors.js';
+import { withDatabaseName } from './database/connection-string.js';
 import { SocialDatabase } from './database/postgres.repository.js';
 import { InMemorySocialRepository, type SocialRepository } from './social.repository.js';
 import { SocialService, type AuthenticatedSocialUser } from './social.service.js';
@@ -33,6 +35,7 @@ export interface SocialServerOptions {
   ledger?: SocialLedgerAdapter;
   serviceKey?: string;
   ledgerServiceKey?: string;
+  rateLimitMax?: number;
 }
 
 export async function buildServer(
@@ -72,6 +75,10 @@ export async function buildServer(
     genReqId: correlationIdFor,
     requestIdLogLabel: 'correlationId',
   });
+  await app.register(rateLimit, {
+    max: options.rateLimitMax ?? 120,
+    timeWindow: '1 minute',
+  });
   app.addHook('onSend', async (request, reply, payload) => {
     reply.header('x-correlation-id', request.id);
     return payload;
@@ -96,7 +103,7 @@ export async function buildServer(
     }
   });
 
-  app.get('/health', () => ({
+  app.get('/health', { config: { rateLimit: false } }, () => ({
     status: 'ok',
     service: 'social',
     timestamp: new Date().toISOString(),
@@ -279,8 +286,9 @@ async function bootstrap(): Promise<void> {
 void bootstrap();
 
 function createRepository(): SocialRepository {
-  return process.env.SOCIAL_DATABASE_URL
-    ? new SocialDatabase(process.env.SOCIAL_DATABASE_URL)
+  const connectionString = process.env.SOCIAL_DATABASE_URL;
+  return connectionString
+    ? new SocialDatabase(withDatabaseName(connectionString, 'equa_social'))
     : new InMemorySocialRepository();
 }
 function createIdentityDirectory(): IdentityDirectory {

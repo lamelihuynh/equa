@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import { config as loadEnv } from 'dotenv';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
+import rateLimit from '@fastify/rate-limit';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -12,6 +13,7 @@ import { join } from 'node:path';
 import { AppModule } from './app.module';
 import { ApiExceptionFilter } from './common/api-exception.filter';
 import { CorrelationIdInterceptor } from './common/correlation-id.interceptor';
+import { IDENTITY_RATE_LIMIT_OPTIONS } from './security/rate-limit';
 
 loadEnv({ path: join(process.cwd(), '../../.env'), quiet: true });
 
@@ -20,6 +22,7 @@ async function bootstrap(): Promise<void> {
     bufferLogs: true,
   });
   await app.register(cookie as never);
+  await app.register(rateLimit as never, IDENTITY_RATE_LIMIT_OPTIONS as never);
   await app.register(
     multipart as never,
     { limits: { fileSize: 2 * 1024 * 1024, files: 1 } } as never,

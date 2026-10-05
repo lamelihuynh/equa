@@ -6,6 +6,7 @@ import rateLimit from '@fastify/rate-limit';
 import { jwtVerify } from 'jose';
 
 import { LedgerDatabase } from './database/postgres.repository.js';
+import { withDatabaseName } from './database/connection-string.js';
 import { InMemoryExpenseRepository, type ExpenseRepository } from './expense.repository.js';
 import { LedgerError } from './errors.js';
 import {
@@ -37,7 +38,7 @@ export async function buildLedgerServer(
   const repository =
     options.repository ??
     (process.env.LEDGER_DATABASE_URL
-      ? new LedgerDatabase(process.env.LEDGER_DATABASE_URL)
+      ? new LedgerDatabase(withDatabaseName(process.env.LEDGER_DATABASE_URL, 'equa_ledger'))
       : new InMemoryExpenseRepository());
   const social =
     options.social ??

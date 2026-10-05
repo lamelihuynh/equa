@@ -166,6 +166,9 @@ importers:
       '@fastify/multipart':
         specifier: 9.2.1
         version: 9.2.1
+      '@fastify/rate-limit':
+        specifier: 11.2.0
+        version: 11.2.0
       '@fastify/static':
         specifier: 8.3.0
         version: 8.3.0
@@ -313,6 +316,9 @@ importers:
       '@equa/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@fastify/rate-limit':
+        specifier: 11.2.0
+        version: 11.2.0
       amqplib:
         specifier: 0.10.9
         version: 0.10.9

@@ -31,14 +31,11 @@ plugins:
   - name: rate-limiting
     config:
       minute: 300
-      policy: redis
-      redis:
-        host: ${REDIS_HOST}
-        port: ${REDIS_PORT}
+      policy: local
 
 services:
   - name: identity-service
-    url: http://${IDENTITY_HOSTPORT}
+    url: https://${IDENTITY_EXTERNAL_HOSTNAME}
     routes:
       - name: identity-routes
         paths:
@@ -49,7 +46,7 @@ services:
         strip_path: false
 
   - name: social-service
-    url: http://${SOCIAL_HOSTPORT}
+    url: https://${SOCIAL_EXTERNAL_HOSTNAME}
     routes:
       - name: social-routes
         paths:
@@ -58,19 +55,10 @@ services:
         strip_path: false
 
   - name: ledger-service
-    url: http://${LEDGER_HOSTPORT}
+    url: https://${LEDGER_EXTERNAL_HOSTNAME}
     routes:
       - name: ledger-routes
         paths:
           - /v1/expenses
           - /v1/categories
-        strip_path: false
-
-  - name: automation-sync-service
-    url: http://${AUTOMATION_SYNC_HOSTPORT}
-    routes:
-      - name: automation-sync-routes
-        paths:
-          - /v1/sync
-          - /v1/recurring
         strip_path: false

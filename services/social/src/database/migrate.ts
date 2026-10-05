@@ -5,6 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { config as loadEnv } from 'dotenv';
 import { Client } from 'pg';
 
+import { withDatabaseName } from './connection-string.js';
+
 loadEnv({ path: join(process.cwd(), '../../.env') });
 
 const ADMIN_DATABASE = 'postgres';
@@ -38,8 +40,11 @@ export function quoteIdentifier(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
 }
 
-async function ensureSocialDatabase(connectionString: string): Promise<void> {
-  const { databaseName, adminConnectionString } = parseSocialDatabaseConnection(connectionString);
+async function ensureSocialDatabase(
+  connectionString: string,
+  adminConnectionString: string,
+): Promise<void> {
+  const { databaseName } = parseSocialDatabaseConnection(connectionString);
   const adminClient = new Client({ connectionString: adminConnectionString });
   try {
     await adminClient.connect();
@@ -70,7 +75,7 @@ async function ensureSocialDatabase(connectionString: string): Promise<void> {
     if (error instanceof Error && error.message.includes('lacks CREATEDB permission')) throw error;
     if (isPostgresError(error, '42501'))
       throw new Error(
-        `Cannot ensure database "${parseSocialDatabaseConnection(connectionString).databaseName}": PostgreSQL user lacks CREATEDB permission or cannot access the admin database "${ADMIN_DATABASE}".`,
+        `Cannot ensure database "${databaseName}": PostgreSQL user lacks CREATEDB permission or cannot access its configured database.`,
         { cause: error },
       );
     throw error;
@@ -107,9 +112,19 @@ async function runMigrations(connectionString: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const connectionString = process.env.SOCIAL_DATABASE_URL;
-  if (!connectionString) throw new Error('SOCIAL_DATABASE_URL must be configured.');
-  await ensureSocialDatabase(connectionString);
+  const configuredUrl = process.env.SOCIAL_DATABASE_URL;
+  if (!configuredUrl) throw new Error('SOCIAL_DATABASE_URL must be configured.');
+  const connectionString = withDatabaseName(configuredUrl, SOCIAL_DATABASE);
+  const configuredDatabaseName = decodeURIComponent(new URL(configuredUrl).pathname.slice(1));
+  const adminConnectionString =
+    configuredDatabaseName === SOCIAL_DATABASE
+      ? parseSocialDatabaseConnection(connectionString).adminConnectionString
+      : configuredDatabaseName === 'equa_identity'
+        ? configuredUrl
+        : undefined;
+  if (!adminConnectionString)
+    throw new Error('SOCIAL_DATABASE_URL must target equa_identity or equa_social.');
+  await ensureSocialDatabase(connectionString, adminConnectionString);
   await runMigrations(connectionString);
 }
 

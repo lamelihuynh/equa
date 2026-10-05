@@ -17,6 +17,21 @@ async function token(secret: string, id: string, email: string): Promise<string>
 }
 
 describe('Social HTTP boundary', () => {
+  it('rate-limits direct public API requests before JWT processing', async () => {
+    const app = await buildServer('secret', { rateLimitMax: 1 });
+    try {
+      const first = await app.inject({ method: 'GET', url: '/v1/groups' });
+      const second = await app.inject({ method: 'GET', url: '/v1/groups' });
+      const health = await app.inject({ method: 'GET', url: '/health' });
+
+      expect(first.statusCode).toBe(401);
+      expect(second.statusCode).toBe(429);
+      expect(health.statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('requires Identity JWT auth and exposes service-only membership checks', async () => {
     const repository = new InMemorySocialRepository();
     const identity: IdentityDirectory = {

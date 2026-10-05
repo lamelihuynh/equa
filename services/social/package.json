@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@equa/contracts": "workspace:*",
+    "@fastify/rate-limit": "11.2.0",
     "amqplib": "0.10.9",
     "dotenv": "17.2.2",
     "fastify": "5.6.2",

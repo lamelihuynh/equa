@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import { config as loadEnv } from 'dotenv';
 import { join } from 'node:path';
 
+import { withDatabaseName } from './database/connection-string.js';
 import { LedgerDatabase } from './database/postgres.repository.js';
 import { buildLedgerServer } from './main.server.js';
 import { LedgerOutboxPublisher } from './outbox.publisher.js';
@@ -13,8 +14,9 @@ if (process.env.NODE_ENV !== 'test')
 
 async function bootstrap(): Promise<void> {
   if (!process.env.IDENTITY_JWT_SECRET) return;
-  const database = process.env.LEDGER_DATABASE_URL
-    ? new LedgerDatabase(process.env.LEDGER_DATABASE_URL)
+  const configuredDatabaseUrl = process.env.LEDGER_DATABASE_URL;
+  const database = configuredDatabaseUrl
+    ? new LedgerDatabase(withDatabaseName(configuredDatabaseUrl, 'equa_ledger'))
     : undefined;
   const app = await buildLedgerServer(process.env.IDENTITY_JWT_SECRET, {
     repository: database,

@@ -13,8 +13,9 @@ import { IdentityConfigService } from '../config/identity-config.service';
 
 @Injectable()
 export class AvatarService {
-  private readonly client: S3Client;
+  private readonly client: S3Client | undefined;
   constructor(@Inject(IdentityConfigService) private readonly config: IdentityConfigService) {
+    if (!config.avatarStorageEnabled) return;
     this.client = new S3Client({
       endpoint: config.s3Endpoint,
       region: config.s3Region,
@@ -27,6 +28,7 @@ export class AvatarService {
     userId: string,
     file: { mimetype: string; toBuffer: () => Promise<Buffer> },
   ): Promise<string> {
+    const client = this.requireClient();
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype))
       throw new ApiException(
         'PROFILE_INVALID_AVATAR',
@@ -43,11 +45,11 @@ export class AvatarService {
     const extension = file.mimetype.split('/')[1] ?? 'bin';
     const key = `avatars/${userId}/${randomUUID()}.${extension}`;
     try {
-      await this.client.send(new CreateBucketCommand({ Bucket: this.config.avatarBucket }));
+      await client.send(new CreateBucketCommand({ Bucket: this.config.avatarBucket }));
     } catch {
       /* Bucket already exists. */
     }
-    await this.client.send(
+    await client.send(
       new PutObjectCommand({
         Bucket: this.config.avatarBucket,
         Key: key,
@@ -58,11 +60,21 @@ export class AvatarService {
     return key;
   }
 
-  readUrl(key: string): Promise<string> {
+  async readUrl(key: string): Promise<string> {
     return getSignedUrl(
-      this.client,
+      this.requireClient(),
       new GetObjectCommand({ Bucket: this.config.avatarBucket, Key: key }),
       { expiresIn: 15 * 60 },
     );
+  }
+
+  private requireClient(): S3Client {
+    if (!this.client)
+      throw new ApiException(
+        'PROFILE_AVATAR_STORAGE_DISABLED',
+        'Avatar storage is disabled in this staging environment.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    return this.client;
   }
 }

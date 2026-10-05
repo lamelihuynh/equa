@@ -1,7 +1,6 @@
-# Candidate STAGING-only Blueprint. Do not sync until the Render inventory has been inspected and recurring costs explicitly approved.
-# Unique project/environment/resource names prevent takeover of the existing API gateway.
-# Six 0.5c-512mb services plus 0.1c-256mb Postgres and 256mb Key Value are about USD 58/month before plan/usage fees.
-
+# Zero-cost, staging-only topology. Four Free web services and one Free Postgres.
+# Free web services are public; application JWT/service-key checks and local rate limits
+# protect direct service URLs. Service-to-service requests use HTTPS hostnames.
 projects:
   - name: equa-staging-demo
     environments:
@@ -10,58 +9,48 @@ projects:
           - type: web
             name: equa-staging-demo-gateway
             runtime: docker
-            plan: 0.5c-512mb
+            plan: free
             region: singapore
             branch: staging/demo
             autoDeployTrigger: checksPass
             dockerfilePath: ./infra/docker/kong-staging.Dockerfile
             dockerContext: .
-            healthCheckPath: /health
             envVars:
               - key: WEB_ORIGIN
-                value: https://staging.equa.io.vn
-              - key: IDENTITY_HOSTPORT
+                sync: false
+              - key: IDENTITY_EXTERNAL_HOSTNAME
                 fromService:
-                  type: pserv
+                  type: web
                   name: equa-staging-demo-identity
-                  property: hostport
-              - key: SOCIAL_HOSTPORT
+                  envVarKey: RENDER_EXTERNAL_HOSTNAME
+              - key: SOCIAL_EXTERNAL_HOSTNAME
                 fromService:
-                  type: pserv
+                  type: web
                   name: equa-staging-demo-social
-                  property: hostport
-              - key: LEDGER_HOSTPORT
+                  envVarKey: RENDER_EXTERNAL_HOSTNAME
+              - key: LEDGER_EXTERNAL_HOSTNAME
                 fromService:
-                  type: pserv
+                  type: web
                   name: equa-staging-demo-ledger
-                  property: hostport
-              - key: AUTOMATION_SYNC_HOSTPORT
-                fromService:
-                  type: pserv
-                  name: equa-staging-demo-automation-sync
-                  property: hostport
-              - key: REDIS_URL
-                fromService:
-                  type: keyvalue
-                  name: equa-staging-demo-redis
-                  property: connectionString
-          - type: pserv
+                  envVarKey: RENDER_EXTERNAL_HOSTNAME
+
+          - type: web
             name: equa-staging-demo-identity
             runtime: node
-            plan: 0.5c-512mb
+            plan: free
             region: singapore
             branch: staging/demo
             rootDir: .
             autoDeployTrigger: checksPass
-            buildCommand:
-              corepack enable && pnpm install --frozen-lockfile && pnpm --filter @equa/identity-service...
-              build
-            preDeployCommand: pnpm --filter @equa/identity-service db:migrate
-            startCommand: pnpm --filter @equa/identity-service start
+            healthCheckPath: /health
+            buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @equa/identity-service... build
+            startCommand: pnpm --filter @equa/identity-service db:migrate && pnpm --filter @equa/identity-service start
             envVars:
               - fromGroup: equa-staging-runtime
               - fromGroup: equa-staging-jwt
               - fromGroup: equa-staging-identity-key
+              - key: APP_WEB_URL
+                sync: false
               - key: IDENTITY_DATABASE_URL
                 fromDatabase:
                   name: equa-staging-demo-postgres
@@ -72,144 +61,93 @@ projects:
                 sync: false
               - key: RESEND_API_KEY
                 sync: false
-              - key: S3_ENDPOINT
-                sync: false
-              - key: S3_REGION
-                value: auto
-              - key: S3_ACCESS_KEY
-                sync: false
-              - key: S3_SECRET_KEY
-                sync: false
-              - key: S3_AVATAR_BUCKET
-                value: equa-staging-avatars
-          - type: pserv
+              - key: AVATAR_STORAGE_ENABLED
+                value: 'false'
+
+          - type: web
             name: equa-staging-demo-social
             runtime: node
-            plan: 0.5c-512mb
+            plan: free
             region: singapore
             branch: staging/demo
             rootDir: .
             autoDeployTrigger: checksPass
+            healthCheckPath: /health
             buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @equa/social-service... build
-            preDeployCommand: pnpm --filter @equa/social-service db:migrate
-            startCommand:
-              IDENTITY_URL="http://${IDENTITY_HOSTPORT}" LEDGER_URL="http://${LEDGER_HOSTPORT}" pnpm --filter
-              @equa/social-service start
+            startCommand: |
+              set -eu
+              export IDENTITY_URL="https://${IDENTITY_EXTERNAL_HOSTNAME}"
+              export LEDGER_URL="https://${LEDGER_EXTERNAL_HOSTNAME}"
+              pnpm --filter @equa/social-service db:migrate
+              exec pnpm --filter @equa/social-service start
             envVars:
               - fromGroup: equa-staging-runtime
               - fromGroup: equa-staging-jwt
               - fromGroup: equa-staging-identity-key
               - fromGroup: equa-staging-social-ledger-key
               - fromGroup: equa-staging-ledger-social-key
+              - key: APP_WEB_URL
+                sync: false
               - key: SOCIAL_DATABASE_URL
-                sync: false
-              - key: IDENTITY_HOSTPORT
+                fromDatabase:
+                  name: equa-staging-demo-postgres
+                  property: connectionString
+              - key: IDENTITY_EXTERNAL_HOSTNAME
                 fromService:
-                  type: pserv
+                  type: web
                   name: equa-staging-demo-identity
-                  property: hostport
-              - key: LEDGER_HOSTPORT
+                  envVarKey: RENDER_EXTERNAL_HOSTNAME
+              - key: LEDGER_EXTERNAL_HOSTNAME
                 fromService:
-                  type: pserv
+                  type: web
                   name: equa-staging-demo-ledger
-                  property: hostport
-              - key: RABBITMQ_URL
-                sync: false
-          - type: pserv
+                  envVarKey: RENDER_EXTERNAL_HOSTNAME
+
+          - type: web
             name: equa-staging-demo-ledger
             runtime: node
-            plan: 0.5c-512mb
+            plan: free
             region: singapore
             branch: staging/demo
             rootDir: .
             autoDeployTrigger: checksPass
+            healthCheckPath: /health
             buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @equa/ledger-service... build
-            preDeployCommand: pnpm --filter @equa/ledger-service migrate
-            startCommand: SOCIAL_URL="http://${SOCIAL_HOSTPORT}" pnpm --filter @equa/ledger-service start
+            startCommand: |
+              set -eu
+              export SOCIAL_URL="https://${SOCIAL_EXTERNAL_HOSTNAME}"
+              pnpm --filter @equa/ledger-service migrate
+              exec pnpm --filter @equa/ledger-service start
             envVars:
               - fromGroup: equa-staging-runtime
               - fromGroup: equa-staging-jwt
               - fromGroup: equa-staging-social-ledger-key
               - fromGroup: equa-staging-ledger-social-key
-              - fromGroup: equa-staging-automation-key
               - fromGroup: equa-staging-feed-key
               - key: LEDGER_DATABASE_URL
-                sync: false
-              - key: SOCIAL_HOSTPORT
+                fromDatabase:
+                  name: equa-staging-demo-postgres
+                  property: connectionString
+              - key: SOCIAL_EXTERNAL_HOSTNAME
                 fromService:
-                  type: pserv
+                  type: web
                   name: equa-staging-demo-social
-                  property: hostport
-              - key: RABBITMQ_URL
-                sync: false
-          - type: pserv
-            name: equa-staging-demo-automation-sync
-            runtime: node
-            plan: 0.5c-512mb
-            region: singapore
-            branch: staging/demo
-            rootDir: .
-            autoDeployTrigger: checksPass
-            buildCommand:
-              corepack enable && pnpm install --frozen-lockfile && pnpm --filter @equa/automation-sync-service...
-              build
-            preDeployCommand: pnpm --filter @equa/automation-sync-service db:migrate
-            startCommand: LEDGER_URL="http://${LEDGER_HOSTPORT}" pnpm --filter @equa/automation-sync-service start
-            envVars:
-              - fromGroup: equa-staging-runtime
-              - fromGroup: equa-staging-jwt
-              - fromGroup: equa-staging-automation-key
-              - key: AUTOMATION_SYNC_DATABASE_URL
-                sync: false
-              - key: LEDGER_HOSTPORT
-                fromService:
-                  type: pserv
-                  name: equa-staging-demo-ledger
-                  property: hostport
-          - type: worker
-            name: equa-staging-demo-notification
-            runtime: node
-            plan: 0.5c-512mb
-            region: singapore
-            branch: staging/demo
-            rootDir: .
-            autoDeployTrigger: checksPass
-            buildCommand:
-              corepack enable && pnpm install --frozen-lockfile && pnpm --filter @equa/notification-worker...
-              build
-            preDeployCommand: pnpm --filter @equa/notification-worker db:migrate
-            startCommand: pnpm --filter @equa/notification-worker start
-            envVars:
-              - fromGroup: equa-staging-runtime
-              - key: NOTIFICATION_DATABASE_URL
-                sync: false
-              - key: RABBITMQ_URL
-                sync: false
-              - key: EMAIL_PROVIDER
-                value: disabled
-          - type: keyvalue
-            name: equa-staging-demo-redis
-            plan: 256mb
-            region: singapore
-            ipAllowList: []
-            persistenceMode: journal-snapshot
-            maxmemoryPolicy: noeviction
+                  envVarKey: RENDER_EXTERNAL_HOSTNAME
+
         databases:
           - name: equa-staging-demo-postgres
             databaseName: equa_identity
             user: equa_staging_owner
             postgresMajorVersion: '18'
-            plan: 0.1c-256mb
-            diskSizeGB: 1
+            plan: free
             region: singapore
             ipAllowList: []
+
         envVarGroups:
           - name: equa-staging-runtime
             envVars:
               - key: NODE_ENV
                 value: production
-              - key: APP_WEB_URL
-                value: https://staging.equa.io.vn
               - key: IDENTITY_JWT_ISSUER
                 value: equa-identity
               - key: IDENTITY_JWT_AUDIENCE
@@ -229,10 +167,6 @@ projects:
           - name: equa-staging-ledger-social-key
             envVars:
               - key: LEDGER_SERVICE_KEY
-                generateValue: true
-          - name: equa-staging-automation-key
-            envVars:
-              - key: AUTOMATION_SYNC_SERVICE_KEY
                 generateValue: true
           - name: equa-staging-feed-key
             envVars:

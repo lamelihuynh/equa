@@ -42,6 +42,13 @@ export class IdentityConfigService {
     return process.env.EMAIL_FROM ?? 'Equa <no-reply@localhost>';
   }
 
+  get avatarStorageEnabled(): boolean {
+    const value = process.env.AVATAR_STORAGE_ENABLED;
+    if (value === undefined || value === 'true') return true;
+    if (value === 'false') return false;
+    throw new Error('AVATAR_STORAGE_ENABLED must be "true" or "false".');
+  }
+
   get isProduction(): boolean {
     return process.env.NODE_ENV === 'production';
   }
