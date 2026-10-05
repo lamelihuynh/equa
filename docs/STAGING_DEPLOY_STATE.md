@@ -15,7 +15,7 @@ remains absent.
 | -------------------------- | ------------------------------------------------------------------ |
 | Current branch             | `staging/demo` (local only)                                        |
 | Base commit                | `0043ee64680a346eb816db05bb9ad52f1d46521c`                         |
-| Application/config commits | `2ed2d2b`, `c7285ef`, `e6c215f`; docs checkpoint is this commit    |
+| Application/config commits | `2ed2d2b`, `c7285ef`, `e6c215f`; documentation commits follow      |
 | `origin/staging/demo`      | Absent; no push performed                                          |
 | Worktree                   | App/config changes committed; reports and generated files excluded |
 | PR #18                     | Existing `develop` PR was not merged or changed                    |
@@ -56,11 +56,13 @@ context excludes `.env`, reports, generated agent files, and TypeScript build-in
 
 The candidate `render.yaml` uses new names (`equa-staging-demo-*`) to avoid taking over
 existing resources. It proposes six paid 0.5 CPU / 512 MB compute services, one 0.1 CPU /
-256 MB Postgres instance, and one 256 MB Key Value instance: about **USD 58/month** before
-bandwidth/build overages and tax. Existing Render resources might reduce incremental cost,
-but that cannot be established without authorized inventory. No paid resources were
-created. CloudAMQP Little Lemur, Resend Free, R2 free tier, and Vercel Hobby are candidates
-only; each requires account/ownership confirmation and may have usage or policy limits.
+256 MB Postgres instance, and one 256 MB Key Value instance: about **USD 58/month** on a
+Render Hobby workspace, before bandwidth/build overages and tax. Render Pro adds USD 25/month
+and Vercel Pro USD 20/month if either account requires those plans; current plans are unknown.
+Existing Render resources might reduce incremental cost, but that cannot be established
+without authorized inventory. No paid resources were created. CloudAMQP Little Lemur, Resend
+Free, R2 free tier, and Vercel Hobby are candidates only; each requires account/ownership
+confirmation and may have usage or policy limits.
 
 ## Validation performed
 
@@ -73,6 +75,8 @@ only; each requires account/ownership confirmation and may have usage or policy 
 | Compose config rendering                                            | PASS                                                                                                                    |
 | Existing local Compose services                                     | Healthy; no restart/down/reset commands were run                                                                        |
 | Render Kong staging Docker image                                    | PASS                                                                                                                    |
+| Render Blueprint JSON Schema and local reference checks             | PASS                                                                                                                    |
+| Render CLI semantic Blueprint validation                            | NOT RUN; CLI requires Render login and workspace selection                                                              |
 | Shared Node Docker image                                            | PASS for Identity; other package variants could not resolve Docker Hub base-image metadata after TLS handshake timeouts |
 | Vercel custom Web URL                                               | HTTP 200; this does not validate current source/API-mode browser flow                                                   |
 | Render API health, migrations, public E2E                           | NOT RUN                                                                                                                 |

@@ -93,9 +93,10 @@ USD 7/month each), Render Postgres (`0.1c-256mb`, about USD 6/month), and Render
 (`256mb`, about USD 10/month): approximately **USD 58/month** before bandwidth, build
 pipeline overages, tax, or any workspace/Vercel plan charges. The Hobby workspace has no
 monthly workspace fee, but private services and background workers do not have a free
-compute plan. The existing Vercel account plan is unknown: Hobby is free for personal
-projects; Pro is USD 20/month. CloudAMQP Little Lemur, Resend Free, and R2's free tier
-are suitable candidates within their quotas, but each still requires account/provider
+compute plan. A Render Pro workspace adds USD 25/month if required; its current plan is
+unknown. The Vercel account plan is also unknown: Hobby is free for personal projects;
+Pro is USD 20/month. CloudAMQP Little Lemur, Resend Free, and R2's free tier are suitable
+candidates within their quotas, but each still requires account/provider
 authorization and setup. See the [Render pricing](https://render.com/pricing),
 [Render compute plans](https://render.com/docs/compute-plans),
 [Render free limits](https://render.com/docs/free),
@@ -112,7 +113,9 @@ Postgres, Redis, or any production resource.
 ## Local validation
 
 `pnpm install --frozen-lockfile`, Web and backend package builds, the Compose config check,
-and the staging Kong Docker build passed locally. The shared Node Docker build passed for
+and the staging Kong Docker build passed locally. The Render Blueprint passed the public
+Render JSON Schema and local service/database/group-reference checks. Render CLI semantic
+validation remains pending workspace login. The shared Node Docker build passed for
 Identity; attempts for the other package variants stopped before build execution when
 Docker Hub manifest requests timed out. These services use native Node builds in the
 candidate Render Blueprint. Full public API health, Render/Vercel settings, migrations,
