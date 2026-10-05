@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   detect:
-    if: github.ref == format('refs/heads/{0}', vars.STAGING_BRANCH || 'develop')
+    if: github.ref != 'refs/heads/staging/demo' && github.ref == format('refs/heads/{0}', vars.STAGING_BRANCH || 'develop')
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}

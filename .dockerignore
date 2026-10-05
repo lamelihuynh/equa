@@ -11,4 +11,7 @@ node_modules
 **/.expo
 .turbo
 *.log
-
+reports/
+**/AGENTS.md
+**/CLAUDE.md
+**/*.tsbuildinfo

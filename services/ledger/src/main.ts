@@ -23,7 +23,10 @@ async function bootstrap(): Promise<void> {
   const rabbit = database && broker ? new AmqpLedgerEventPublisher(broker) : undefined;
   const outbox = rabbit && database ? new LedgerOutboxPublisher(database, rabbit) : undefined;
   const stopOutbox = outbox?.start();
-  await app.listen({ port: Number(process.env.LEDGER_PORT ?? 3002), host: '0.0.0.0' });
+  await app.listen({
+    port: Number(process.env.PORT ?? process.env.LEDGER_PORT ?? 3002),
+    host: '0.0.0.0',
+  });
   const shutdown = async (): Promise<void> => {
     stopOutbox?.();
     await rabbit?.close();

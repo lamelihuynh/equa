@@ -220,7 +220,10 @@ export async function buildServer(
 async function bootstrap(): Promise<void> {
   if (!process.env.IDENTITY_JWT_SECRET) return;
   const app = await buildServer();
-  await app.listen({ port: Number(process.env.AUTOMATION_SYNC_PORT ?? 3004), host: '0.0.0.0' });
+  await app.listen({
+    port: Number(process.env.PORT ?? process.env.AUTOMATION_SYNC_PORT ?? 3004),
+    host: '0.0.0.0',
+  });
 }
 void bootstrap().catch((error: unknown) => {
   reportRecoverableError('server startup', error);
