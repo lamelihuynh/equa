@@ -4,7 +4,8 @@ import { config as loadEnv } from 'dotenv';
 
 import { InMemoryNotificationStore } from './in-memory.store.js';
 import { PostgresNotificationStore } from './database/postgres.store.js';
-import { DisabledNotificationProvider, NotificationWorker } from './notification.worker.js';
+import { createNotificationProvider } from './mailpit.provider.js';
+import { NotificationWorker } from './notification.worker.js';
 import { consumeRabbit } from './rabbit.consumer.js';
 
 if (process.env.NODE_ENV !== 'test')
@@ -42,18 +43,16 @@ const reportRabbitFailure = (notice: {
     }),
   );
 };
-const worker = new NotificationWorker(
-  store,
-  new DisabledNotificationProvider(),
-  undefined,
-  reportWorkerFailure,
-);
+const provider = createNotificationProvider();
+const worker = new NotificationWorker(store, provider, undefined, reportWorkerFailure);
 const stopPolling = worker.start();
 console.info(
   JSON.stringify({
     level: 'info',
     message: databaseUrl
-      ? 'PostgreSQL worker ready; provider disabled'
+      ? provider.enabled
+        ? 'PostgreSQL worker ready; local Mailpit provider enabled'
+        : 'PostgreSQL worker ready; provider disabled'
       : 'persistence not configured; worker disabled',
     service,
   }),

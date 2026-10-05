@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { DomainEvent } from '@equa/contracts';
 
 import type {
   FriendRequest,
@@ -7,7 +8,26 @@ import type {
   GroupInvitation,
   GroupMember,
   GroupType,
+  PendingGroupInvitation,
 } from './types.js';
+
+export interface ClaimedSocialEvent {
+  event: DomainEvent;
+  leaseToken: string;
+  attempts: number;
+}
+
+export interface SocialOutboxStore {
+  claimOutbox(now: Date): Promise<ClaimedSocialEvent | undefined>;
+  completeOutbox(id: string, leaseToken: string): Promise<void>;
+  retryOutbox(
+    id: string,
+    leaseToken: string,
+    error: string,
+    retryAt: Date,
+    terminal: boolean,
+  ): Promise<void>;
+}
 
 export interface SocialRepository {
   createFriendRequest(row: FriendRequest): Promise<FriendRequest>;
@@ -35,6 +55,9 @@ export interface SocialRepository {
   listMembers(groupId: string): Promise<GroupMember[]>;
   removeMember(groupId: string, userId: string): Promise<void>;
   createInvitation(row: GroupInvitation): Promise<void>;
+  createInvitationWithEvent(row: GroupInvitation, event: DomainEvent): Promise<void>;
+  ensureOutboxEvent(event: DomainEvent): Promise<void>;
+  listPendingInvitationsForUser(userId: string, email: string): Promise<PendingGroupInvitation[]>;
   findPendingInvitation(
     groupId: string,
     kind: GroupInvitation['kind'],
@@ -43,21 +66,38 @@ export interface SocialRepository {
   findInvitation(id: string): Promise<GroupInvitation | undefined>;
   findInvitationByToken(token: string): Promise<GroupInvitation | undefined>;
   saveInvitation(row: GroupInvitation): Promise<void>;
+  declineGroupInvitation(
+    invitationId: string,
+    actorId: string,
+    actorEmail: string,
+  ): Promise<GroupInvitation | undefined>;
   /** Atomically accepts an invitation and creates the member row. */
   acceptGroupInvitation(
     invitationId: string,
     actorId: string,
+    actorEmail: string,
     joinedAt: string,
     acceptedAt: string,
   ): Promise<GroupMember>;
 }
 
-export class InMemorySocialRepository implements SocialRepository {
+export class InMemorySocialRepository implements SocialRepository, SocialOutboxStore {
   readonly friendRequests = new Map<string, FriendRequest>();
   readonly friendships = new Map<string, Friendship>();
   readonly groups = new Map<string, Group>();
   readonly members = new Map<string, GroupMember>();
   readonly invitations = new Map<string, GroupInvitation>();
+  readonly outbox = new Map<string, DomainEvent>();
+  private readonly outboxState = new Map<
+    string,
+    {
+      attempts: number;
+      availableAt: Date;
+      leaseUntil?: Date;
+      leaseToken?: string;
+      status: 'pending' | 'leased' | 'published' | 'dead';
+    }
+  >();
 
   async createFriendRequest(row: FriendRequest): Promise<FriendRequest> {
     const duplicate = [...this.friendRequests.values()].find(
@@ -225,6 +265,43 @@ export class InMemorySocialRepository implements SocialRepository {
     this.invitations.set(row.id, structuredClone(row));
     return Promise.resolve();
   }
+  async createInvitationWithEvent(row: GroupInvitation, event: DomainEvent): Promise<void> {
+    if (event.id !== row.id) throw new Error('Invitation event id must match invitation id.');
+    await this.createInvitation(row);
+    this.insertOutboxEvent(event);
+  }
+  ensureOutboxEvent(event: DomainEvent): Promise<void> {
+    this.insertOutboxEvent(event);
+    return Promise.resolve();
+  }
+  listPendingInvitationsForUser(userId: string, email: string): Promise<PendingGroupInvitation[]> {
+    const normalizedEmail = normalizeIdentifier(email);
+    const pending = [...this.invitations.values()]
+      .filter(
+        (invitation) =>
+          invitation.kind === 'email' &&
+          invitation.status === 'pending' &&
+          (invitation.targetUserId === userId ||
+            (invitation.targetUserId === undefined &&
+              normalizeIdentifier(invitation.targetEmail ?? '') === normalizedEmail)),
+      )
+      .flatMap((invitation) => {
+        const group = this.groups.get(invitation.groupId);
+        if (!group || group.dissolvedAt) return [];
+        return [
+          {
+            invitation: structuredClone(invitation),
+            group: { id: group.id, name: group.name, type: group.type },
+          },
+        ];
+      })
+      .sort(
+        (left, right) =>
+          right.invitation.createdAt.localeCompare(left.invitation.createdAt) ||
+          left.invitation.id.localeCompare(right.invitation.id),
+      );
+    return Promise.resolve(pending);
+  }
   findPendingInvitation(
     groupId: string,
     kind: GroupInvitation['kind'],
@@ -255,16 +332,34 @@ export class InMemorySocialRepository implements SocialRepository {
     this.invitations.set(row.id, structuredClone(row));
     return Promise.resolve();
   }
+  declineGroupInvitation(
+    invitationId: string,
+    actorId: string,
+    actorEmail: string,
+  ): Promise<GroupInvitation | undefined> {
+    const invitation = this.invitations.get(invitationId);
+    if (
+      !invitation ||
+      invitation.status !== 'pending' ||
+      invitation.kind !== 'email' ||
+      !isInvitationRecipient(invitation, actorId, actorEmail)
+    )
+      return Promise.resolve(undefined);
+    invitation.status = 'declined';
+    this.invitations.set(invitation.id, structuredClone(invitation));
+    return Promise.resolve(structuredClone(invitation));
+  }
   async acceptGroupInvitation(
     invitationId: string,
     actorId: string,
+    actorEmail: string,
     joinedAt: string,
     acceptedAt: string,
   ): Promise<GroupMember> {
     const invitation = this.invitations.get(invitationId);
     if (!invitation) throw new Error('Invitation was not found.');
     const existing = this.members.get(memberKey(invitation.groupId, actorId));
-    if (invitation.targetUserId && invitation.targetUserId !== actorId)
+    if (invitation.kind === 'email' && !isInvitationRecipient(invitation, actorId, actorEmail))
       throw new Error('Invitation is addressed to another identity.');
     if (invitation.status === 'accepted' && existing)
       return Promise.resolve(structuredClone(existing));
@@ -293,6 +388,80 @@ export class InMemorySocialRepository implements SocialRepository {
   private clone<T>(value: T | undefined): T | undefined {
     return value === undefined ? undefined : structuredClone(value);
   }
+
+  claimOutbox(now: Date): Promise<ClaimedSocialEvent | undefined> {
+    for (const [id, state] of this.outboxState) {
+      if (
+        state.attempts >= 8 &&
+        (state.status === 'pending' ||
+          (state.status === 'leased' && state.leaseUntil !== undefined && state.leaseUntil <= now))
+      ) {
+        state.status = 'dead';
+        state.leaseUntil = undefined;
+      }
+      this.outboxState.set(id, state);
+    }
+    const candidate = [...this.outbox.entries()]
+      .filter(([id]) => {
+        const state = this.outboxState.get(id);
+        return (
+          state !== undefined &&
+          state.attempts < 8 &&
+          state.availableAt <= now &&
+          (state.status === 'pending' ||
+            (state.status === 'leased' &&
+              state.leaseUntil !== undefined &&
+              state.leaseUntil <= now))
+        );
+      })
+      .sort(
+        (left, right) =>
+          left[1].occurredAt.localeCompare(right[1].occurredAt) || left[0].localeCompare(right[0]),
+      )[0];
+    if (!candidate) return Promise.resolve(undefined);
+    const [id, event] = candidate;
+    const state = this.outboxState.get(id)!;
+    const leaseToken = randomUUID();
+    state.attempts += 1;
+    state.status = 'leased';
+    state.leaseToken = leaseToken;
+    state.leaseUntil = new Date(now.valueOf() + 30_000);
+    return Promise.resolve({ event: structuredClone(event), leaseToken, attempts: state.attempts });
+  }
+  completeOutbox(id: string, leaseToken: string): Promise<void> {
+    const state = this.outboxState.get(id);
+    if (state?.status === 'leased' && state.leaseToken === leaseToken) {
+      state.status = 'published';
+      state.leaseUntil = undefined;
+      state.leaseToken = undefined;
+    }
+    return Promise.resolve();
+  }
+  retryOutbox(
+    id: string,
+    leaseToken: string,
+    _error: string,
+    retryAt: Date,
+    terminal: boolean,
+  ): Promise<void> {
+    const state = this.outboxState.get(id);
+    if (state?.status === 'leased' && state.leaseToken === leaseToken) {
+      state.status = terminal ? 'dead' : 'pending';
+      state.availableAt = retryAt;
+      state.leaseUntil = undefined;
+      state.leaseToken = undefined;
+    }
+    return Promise.resolve();
+  }
+  private insertOutboxEvent(event: DomainEvent): void {
+    if (this.outbox.has(event.id)) return;
+    this.outbox.set(event.id, structuredClone(event));
+    this.outboxState.set(event.id, {
+      attempts: 0,
+      availableAt: new Date(0),
+      status: 'pending',
+    });
+  }
 }
 
 export function normalizeIdentifier(identifier: string): string {
@@ -317,4 +486,13 @@ function uniqueViolation(): Error & { code: string } {
   };
   error.code = '23505';
   return error;
+}
+
+function isInvitationRecipient(
+  invitation: GroupInvitation,
+  actorId: string,
+  actorEmail: string,
+): boolean {
+  if (invitation.targetUserId) return invitation.targetUserId === actorId;
+  return normalizeIdentifier(invitation.targetEmail ?? '') === normalizeIdentifier(actorEmail);
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { GROUP_INVITATION_CREATED_EVENT, type NotificationJob } from '@equa/contracts';
 
 import { InMemoryNotificationStore } from './in-memory.store';
 import {
@@ -26,6 +27,68 @@ const enabled = (deliver: NotificationProvider['deliver']): NotificationProvider
 });
 
 describe('NotificationWorker', () => {
+  it('creates one durable invitation email job and limits the Mailpit worker to its supported event', async () => {
+    const store = new InMemoryNotificationStore();
+    const delivered: NotificationJob[] = [];
+    const invitationId = 'invitation-1';
+    const invitationEvent = {
+      version: 1 as const,
+      id: invitationId,
+      type: GROUP_INVITATION_CREATED_EVENT,
+      occurredAt: '2026-01-01T00:00:00Z',
+      ownerId: firstParticipantId,
+      producer: 'social',
+      payload: {
+        invitationId,
+        recipientEmail: 'bob@example.test',
+        inviterName: 'Alice',
+        inviterEmail: 'alice@example.test',
+        groupName: 'Trip',
+        groupType: 'trip',
+        groupId: 'group-1',
+        appUrl: 'http://localhost:3000/groups',
+      },
+    };
+    await store.persistInboxAndJobs(invitationEvent, [
+      {
+        eventId: invitationId,
+        deliveryId: `notification:${invitationId}:${firstParticipantId}`,
+        ownerId: firstParticipantId,
+        type: GROUP_INVITATION_CREATED_EVENT,
+        payload: invitationEvent.payload,
+      },
+    ]);
+    await store.persistInboxAndJobs(event('expense-event'), [
+      {
+        eventId: 'expense-event',
+        deliveryId: 'notification:expense-event:unused',
+        ownerId: secondParticipantId,
+        type: 'expense.created',
+        payload: {},
+      },
+    ]);
+    const provider: NotificationProvider = {
+      enabled: true,
+      supportedTypes: [GROUP_INVITATION_CREATED_EVENT],
+      deliver: (job) => {
+        delivered.push(job);
+        return Promise.resolve();
+      },
+    };
+    const worker = new NotificationWorker(store, provider);
+
+    await worker.deliverOne();
+    await worker.deliverOne();
+
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]).toMatchObject({
+      type: GROUP_INVITATION_CREATED_EVENT,
+      ownerId: firstParticipantId,
+      payload: { recipientEmail: 'bob@example.test', groupName: 'Trip' },
+    });
+    expect(store.count()).toBe(1);
+  });
+
   it('acks durable duplicate events once and delivers their job once', async () => {
     const store = new InMemoryNotificationStore();
     let deliveries = 0;
@@ -130,6 +193,47 @@ describe('NotificationWorker', () => {
       const due = await store.claimDue(new Date(now.valueOf() + 1_001));
       expect(due).toBeDefined();
     }
+  });
+
+  it('retries a failed group invitation email without losing the durable job', async () => {
+    const store = new InMemoryNotificationStore();
+    const invitation = {
+      version: 1 as const,
+      id: 'invitation-retry',
+      type: GROUP_INVITATION_CREATED_EVENT,
+      occurredAt: '2026-01-01T00:00:00Z',
+      ownerId: firstParticipantId,
+      payload: {
+        invitationId: 'invitation-retry',
+        recipientEmail: 'bob@example.test',
+        inviterName: 'Alice',
+        inviterEmail: 'alice@example.test',
+        groupName: 'Trip',
+        appUrl: 'http://localhost:3000/groups',
+      },
+    };
+    let now = new Date('2026-01-01T00:00:00Z');
+    let deliveries = 0;
+    const provider: NotificationProvider = {
+      enabled: true,
+      supportedTypes: [GROUP_INVITATION_CREATED_EVENT],
+      deliver: () => {
+        deliveries += 1;
+        return deliveries === 1
+          ? Promise.reject(new ProviderDeliveryError(503))
+          : Promise.resolve();
+      },
+    };
+    const worker = new NotificationWorker(store, provider, () => now);
+    await worker.ingest(invitation, message);
+
+    await worker.deliverOne();
+    expect(store.count()).toBe(1);
+    now = new Date(now.valueOf() + 2_001);
+    await worker.deliverOne();
+
+    expect(deliveries).toBe(2);
+    expect(store.count()).toBe(0);
   });
 
   it('does not claim jobs while the provider is disabled', async () => {

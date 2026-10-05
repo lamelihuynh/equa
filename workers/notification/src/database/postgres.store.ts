@@ -40,7 +40,10 @@ export class PostgresNotificationStore implements NotificationStore {
       client.release();
     }
   }
-  async claimDue(now: Date): Promise<ClaimedNotificationJob | undefined> {
+  async claimDue(
+    now: Date,
+    supportedTypes?: readonly string[],
+  ): Promise<ClaimedNotificationJob | undefined> {
     const token = randomUUID();
     await this.pool.query(
       "UPDATE notification_jobs SET status = 'dead', lease_until = NULL, last_error = COALESCE(last_error, 'Retry budget exhausted') WHERE attempts >= 8 AND ((status = 'pending') OR (status = 'leased' AND lease_until <= $1))",
@@ -55,8 +58,8 @@ export class PostgresNotificationStore implements NotificationStore {
       attempts: number;
       lease_token: string;
     }>(
-      "WITH next AS (SELECT delivery_id FROM notification_jobs WHERE attempts < 8 AND ((status = 'pending' AND available_at <= $1) OR (status = 'leased' AND lease_until <= $1)) ORDER BY available_at, delivery_id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE notification_jobs j SET status = 'leased', attempts = j.attempts + 1, lease_until = $2, lease_token = $3 FROM next WHERE j.delivery_id = next.delivery_id RETURNING j.delivery_id, j.event_id, j.owner_id, j.type, j.payload, j.attempts, j.lease_token",
-      [now, new Date(now.valueOf() + 30_000), token],
+      "WITH next AS (SELECT delivery_id FROM notification_jobs WHERE attempts < 8 AND ($2::text[] IS NULL OR type = ANY($2::text[])) AND ((status = 'pending' AND available_at <= $1) OR (status = 'leased' AND lease_until <= $1)) ORDER BY available_at, delivery_id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE notification_jobs j SET status = 'leased', attempts = j.attempts + 1, lease_until = $3, lease_token = $4 FROM next WHERE j.delivery_id = next.delivery_id RETURNING j.delivery_id, j.event_id, j.owner_id, j.type, j.payload, j.attempts, j.lease_token",
+      [now, supportedTypes ?? null, new Date(now.valueOf() + 30_000), token],
     );
     const row = result.rows[0];
     return row

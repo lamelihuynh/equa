@@ -1,7 +1,21 @@
+import { randomUUID } from 'node:crypto';
+
+import type { DomainEvent } from '@equa/contracts';
 import { Pool } from 'pg';
 
-import type { SocialRepository } from '../social.repository.js';
-import type { FriendRequest, Friendship, Group, GroupInvitation, GroupMember } from '../types.js';
+import type {
+  ClaimedSocialEvent,
+  SocialOutboxStore,
+  SocialRepository,
+} from '../social.repository.js';
+import type {
+  FriendRequest,
+  Friendship,
+  Group,
+  GroupInvitation,
+  GroupMember,
+  PendingGroupInvitation,
+} from '../types.js';
 
 interface FriendRequestRow {
   id: string;
@@ -43,7 +57,19 @@ interface InvitationRow {
   accepted_at: Date | null;
 }
 
-export class SocialDatabase implements SocialRepository {
+interface PendingInvitationRow extends InvitationRow {
+  group_name: string;
+  group_type: Group['type'];
+}
+
+interface SocialOutboxRow {
+  id: string;
+  event: DomainEvent;
+  attempts: number;
+  lease_token: string;
+}
+
+export class SocialDatabase implements SocialRepository, SocialOutboxStore {
   private readonly pool: Pool;
   constructor(connectionString: string) {
     this.pool = new Pool({ connectionString, max: 10 });
@@ -320,6 +346,59 @@ export class SocialDatabase implements SocialRepository {
       ],
     );
   }
+  async createInvitationWithEvent(row: GroupInvitation, event: DomainEvent): Promise<void> {
+    if (event.id !== row.id) throw new Error('Invitation event id must match invitation id.');
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        'INSERT INTO group_invitations (id,group_id,inviter_id,kind,target_identifier,target_email,target_user_id,token,status,created_at,accepted_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+        [
+          row.id,
+          row.groupId,
+          row.inviterId,
+          row.kind,
+          row.targetIdentifier ?? null,
+          row.targetEmail ?? null,
+          row.targetUserId ?? null,
+          row.token ?? null,
+          row.status,
+          row.createdAt,
+          row.acceptedAt ?? null,
+        ],
+      );
+      await client.query('INSERT INTO social_outbox (id,event,created_at) VALUES ($1,$2,$3)', [
+        event.id,
+        event,
+        event.occurredAt,
+      ]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  async ensureOutboxEvent(event: DomainEvent): Promise<void> {
+    await this.pool.query(
+      'INSERT INTO social_outbox (id,event,created_at) VALUES ($1,$2,$3) ON CONFLICT (id) DO NOTHING',
+      [event.id, event, event.occurredAt],
+    );
+  }
+  async listPendingInvitationsForUser(
+    userId: string,
+    email: string,
+  ): Promise<PendingGroupInvitation[]> {
+    const result = await this.pool.query<PendingInvitationRow>(
+      "SELECT i.*,g.name AS group_name,g.type AS group_type FROM group_invitations i JOIN social_groups g ON g.id=i.group_id WHERE i.status='pending' AND i.kind='email' AND g.dissolved_at IS NULL AND (i.target_user_id=$1 OR (i.target_user_id IS NULL AND lower(i.target_email)=lower($2))) ORDER BY i.created_at DESC,i.id",
+      [userId, email.trim()],
+    );
+    return result.rows.map((row) => ({
+      invitation: toInvitation(row),
+      group: { id: row.group_id, name: row.group_name, type: row.group_type },
+    }));
+  }
   async findPendingInvitation(
     groupId: string,
     kind: GroupInvitation['kind'],
@@ -352,9 +431,21 @@ export class SocialDatabase implements SocialRepository {
       [row.id, row.status, row.acceptedAt ?? null, row.targetUserId ?? null],
     );
   }
+  async declineGroupInvitation(
+    invitationId: string,
+    actorId: string,
+    actorEmail: string,
+  ): Promise<GroupInvitation | undefined> {
+    const result = await this.pool.query<InvitationRow>(
+      "UPDATE group_invitations SET status='declined' WHERE id=$1 AND status='pending' AND kind='email' AND ((target_user_id IS NOT NULL AND target_user_id=$2) OR (target_user_id IS NULL AND lower(target_email)=lower($3))) RETURNING *",
+      [invitationId, actorId, actorEmail.trim()],
+    );
+    return result.rows[0] ? toInvitation(result.rows[0]) : undefined;
+  }
   async acceptGroupInvitation(
     invitationId: string,
     actorId: string,
+    actorEmail: string,
     joinedAt: string,
     acceptedAt: string,
   ): Promise<GroupMember> {
@@ -372,7 +463,12 @@ export class SocialDatabase implements SocialRepository {
         [invitation.group_id],
       );
       if (!group.rows[0] || group.rows[0].dissolved_at) throw new Error('Group is unavailable.');
-      if (invitation.target_user_id && invitation.target_user_id !== actorId)
+      if (
+        invitation.kind === 'email' &&
+        (invitation.target_user_id
+          ? invitation.target_user_id !== actorId
+          : normalizeIdentifier(invitation.target_email ?? '') !== normalizeIdentifier(actorEmail))
+      )
         throw new Error('Invitation is addressed to another identity.');
       if (invitation.status === 'revoked') throw new Error('Invitation is no longer pending.');
       const memberResult = await client.query<MemberRow>(
@@ -413,6 +509,50 @@ export class SocialDatabase implements SocialRepository {
     } finally {
       client.release();
     }
+  }
+
+  async claimOutbox(now: Date): Promise<ClaimedSocialEvent | undefined> {
+    await this.pool.query(
+      'UPDATE social_outbox SET dead_at=COALESCE(dead_at,now()),lease_until=NULL,lease_token=NULL WHERE published_at IS NULL AND dead_at IS NULL AND attempts >= 8 AND (lease_until IS NULL OR lease_until <= $1)',
+      [now],
+    );
+    const leaseToken = randomUUID();
+    const result = await this.pool.query<SocialOutboxRow>(
+      `WITH next AS (
+        SELECT id FROM social_outbox
+         WHERE published_at IS NULL AND dead_at IS NULL AND attempts < 8 AND available_at <= $1
+           AND (lease_until IS NULL OR lease_until <= $1)
+         ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1
+       )
+       UPDATE social_outbox o SET attempts=o.attempts+1,lease_until=$2,lease_token=$3
+       FROM next WHERE o.id=next.id
+       RETURNING o.id,o.event,o.attempts,o.lease_token`,
+      [now, new Date(now.valueOf() + 30_000), leaseToken],
+    );
+    const row = result.rows[0];
+    return row
+      ? { event: row.event, attempts: row.attempts, leaseToken: row.lease_token }
+      : undefined;
+  }
+
+  async completeOutbox(id: string, leaseToken: string): Promise<void> {
+    await this.pool.query(
+      'UPDATE social_outbox SET published_at=COALESCE(published_at,now()),lease_until=NULL,lease_token=NULL WHERE id=$1 AND published_at IS NULL AND dead_at IS NULL AND lease_token=$2',
+      [id, leaseToken],
+    );
+  }
+
+  async retryOutbox(
+    id: string,
+    leaseToken: string,
+    error: string,
+    retryAt: Date,
+    terminal: boolean,
+  ): Promise<void> {
+    await this.pool.query(
+      'UPDATE social_outbox SET available_at=$3,lease_until=NULL,lease_token=NULL,last_error=$4,dead_at=CASE WHEN $5 THEN COALESCE(dead_at,now()) ELSE dead_at END WHERE id=$1 AND lease_token=$2 AND published_at IS NULL AND dead_at IS NULL',
+      [id, leaseToken, retryAt, error, terminal],
+    );
   }
 }
 
@@ -462,4 +602,8 @@ function toInvitation(row: InvitationRow): GroupInvitation {
     createdAt: row.created_at.toISOString(),
     acceptedAt: row.accepted_at?.toISOString(),
   };
+}
+
+function normalizeIdentifier(identifier: string): string {
+  return identifier.trim().toLowerCase();
 }

@@ -6,14 +6,21 @@ import { SocialService } from '../src/social.service.js';
 import { IdentityLookupUnavailableError, type IdentityDirectory } from '../src/identity-adapter.js';
 import type { SocialLedgerAdapter } from '../src/ledger-adapter.js';
 
-const alice = { id: 'alice', email: 'alice@example.test' };
-const bob = { id: 'bob', email: 'bob@example.test' };
+const alice = { id: 'alice', displayName: 'Alice', email: 'alice@example.test' };
+const bob = { id: 'bob', displayName: 'Bob', email: 'bob@example.test' };
 const resolved = <T>(value: T): Promise<T> => Promise.resolve(value);
+const identityDirectory = (
+  resolveIdentifier: IdentityDirectory['resolveIdentifier'],
+): IdentityDirectory => ({
+  resolveIdentifier,
+  resolveUsers: (ids) =>
+    resolved(ids.map((id) => (id === alice.id ? alice : id === bob.id ? bob : { id }))),
+});
 
 describe('SocialService friend lifecycle', () => {
   it('creates, accepts, and idempotently repeats a request', async () => {
     const repository = new InMemorySocialRepository();
-    const identity: IdentityDirectory = { resolveIdentifier: () => resolved(bob) };
+    const identity = identityDirectory(() => resolved(bob));
     const ledger: SocialLedgerAdapter = {
       pairBalance: () =>
         resolved({
@@ -33,6 +40,12 @@ describe('SocialService friend lifecycle', () => {
       userA: 'alice',
       userB: 'bob',
     });
+    await expect(service.listFriends(alice)).resolves.toMatchObject([
+      { userA: 'alice', userB: 'bob', friend: { displayName: 'Bob' } },
+    ]);
+    await expect(service.listFriendRequests(bob)).resolves.toMatchObject([
+      { id: request.id, requester: { displayName: 'Alice' } },
+    ]);
     expect(await service.acceptFriendRequest(bob, request.id)).toMatchObject({
       userA: 'alice',
       userB: 'bob',
@@ -41,9 +54,9 @@ describe('SocialService friend lifecycle', () => {
 
   it('rejects self requests and gates removal on Ledger debt', async () => {
     const repository = new InMemorySocialRepository();
-    const identity: IdentityDirectory = {
-      resolveIdentifier: (identifier) => resolved(identifier.includes('alice') ? alice : bob),
-    };
+    const identity = identityDirectory((identifier) =>
+      resolved(identifier.includes('alice') ? alice : bob),
+    );
     const ledger: SocialLedgerAdapter = {
       pairBalance: () =>
         resolved({
@@ -76,7 +89,7 @@ describe('SocialService friend lifecycle', () => {
     };
     const service = new SocialService(
       repository,
-      { resolveIdentifier: (value) => resolved(value === 'bob' ? bob : undefined) },
+      identityDirectory((value) => resolved(value === 'bob' ? bob : undefined)),
       ledger,
     );
     const request = await service.sendFriendRequest(alice, ' Bob ');
@@ -84,7 +97,7 @@ describe('SocialService friend lifecycle', () => {
     await expect(
       new SocialService(
         repository,
-        { resolveIdentifier: () => Promise.reject(new IdentityLookupUnavailableError()) },
+        identityDirectory(() => Promise.reject(new IdentityLookupUnavailableError())),
         ledger,
       ).sendFriendRequest(alice, 'carol'),
     ).rejects.toMatchObject({ code: 'IDENTITY_UNAVAILABLE', status: 503 });
@@ -92,12 +105,11 @@ describe('SocialService friend lifecycle', () => {
 
   it('converges reverse requests and duplicate link invitations across service instances', async () => {
     const repository = new InMemorySocialRepository();
-    const identity: IdentityDirectory = {
-      resolveIdentifier: (value) =>
-        resolved(
-          value === 'alice@example.test' ? alice : value === 'bob@example.test' ? bob : undefined,
-        ),
-    };
+    const identity = identityDirectory((value) =>
+      resolved(
+        value === 'alice@example.test' ? alice : value === 'bob@example.test' ? bob : undefined,
+      ),
+    );
     const ledger: SocialLedgerAdapter = {
       pairBalance: () =>
         resolved({
@@ -142,7 +154,7 @@ describe('SocialService friend lifecycle', () => {
       hasOutstandingDebt: vi.fn().mockResolvedValue(false),
       hasOutstandingGroupDebt: () => resolved(false),
     };
-    const identity: IdentityDirectory = { resolveIdentifier: () => resolved(bob) };
+    const identity = identityDirectory(() => resolved(bob));
     const service = new SocialService(repository, identity, ledger);
     const request = await service.sendFriendRequest(alice, bob.email);
     await service.acceptFriendRequest(bob, request.id);
@@ -159,7 +171,7 @@ describe('SocialService friend lifecycle', () => {
 describe('SocialService group lifecycle', () => {
   it('makes the creator admin, supports invite acceptance, and authorizes management', async () => {
     const repository = new InMemorySocialRepository();
-    const identity: IdentityDirectory = { resolveIdentifier: () => resolved(bob) };
+    const identity = identityDirectory(() => resolved(bob));
     const ledger: SocialLedgerAdapter = {
       pairBalance: () =>
         resolved({
@@ -182,10 +194,45 @@ describe('SocialService group lifecycle', () => {
       kind: 'email',
       identifier: bob.email,
     });
-    await service.acceptGroupInvitation(bob, invitation.id);
+    expect(repository.outbox.size).toBe(1);
+    expect(repository.outbox.get(invitation.id)).toMatchObject({
+      type: 'group.invitation.created',
+      ownerId: bob.id,
+      payload: {
+        recipientEmail: bob.email,
+        inviterName: 'Alice',
+        groupName: 'Trip',
+      },
+    });
+    await expect(service.listPendingGroupInvitations(bob)).resolves.toMatchObject([
+      {
+        id: invitation.id,
+        group: { id: group.id, name: 'Trip' },
+        inviter: { displayName: 'Alice', email: alice.email },
+      },
+    ]);
     expect(
-      (await service.listGroupMembers(alice, group.id)).map((member) => member.userId),
-    ).toEqual(['alice', 'bob']);
+      await service.inviteToGroup(alice, group.id, { kind: 'email', identifier: bob.email }),
+    ).toEqual(invitation);
+    expect(repository.invitations.size).toBe(1);
+    expect(repository.outbox.size).toBe(1);
+    await expect(service.acceptGroupInvitation(alice, invitation.id)).rejects.toMatchObject({
+      code: 'GROUP_INVITATION_FORBIDDEN',
+      status: 403,
+    });
+    await service.acceptGroupInvitation(bob, invitation.id);
+    await expect(
+      service.inviteToGroup(bob, group.id, { kind: 'email', identifier: alice.email }),
+    ).rejects.toMatchObject({ code: 'GROUP_ADMIN_REQUIRED', status: 403 });
+    await expect(service.listPendingGroupInvitations(bob)).resolves.toEqual([]);
+    await expect(service.listGroupMembers(alice, group.id)).resolves.toMatchObject([
+      { userId: 'alice', role: 'admin', user: { displayName: 'Alice' } },
+      { userId: 'bob', role: 'member', user: { displayName: 'Bob' } },
+    ]);
+    await expect(service.acceptGroupInvitation(bob, invitation.id)).resolves.toMatchObject({
+      userId: 'bob',
+      role: 'member',
+    });
     await expect(service.updateGroup(bob, group.id, { name: 'Nope' })).rejects.toMatchObject({
       code: 'GROUP_ADMIN_REQUIRED',
     });
@@ -194,9 +241,40 @@ describe('SocialService group lifecycle', () => {
     await service.dissolveGroup(alice, group.id);
   });
 
+  it('lets only the invited account decline and does not create group membership', async () => {
+    const repository = new InMemorySocialRepository();
+    const service = new SocialService(
+      repository,
+      identityDirectory(() => resolved(bob)),
+      {
+        pairBalance: () => Promise.reject(new Error('unused')),
+        hasOutstandingDebt: () => resolved(false),
+        hasOutstandingGroupDebt: () => resolved(false),
+      },
+    );
+    const group = await service.createGroup(alice, { name: 'Event', type: 'event' });
+    const invitation = await service.inviteToGroup(alice, group.id, {
+      kind: 'email',
+      identifier: bob.email,
+    });
+
+    await expect(service.declineGroupInvitation(alice, invitation.id)).rejects.toMatchObject({
+      code: 'GROUP_INVITATION_FORBIDDEN',
+      status: 403,
+    });
+    await expect(service.declineGroupInvitation(bob, invitation.id)).resolves.toMatchObject({
+      status: 'declined',
+    });
+    await expect(service.declineGroupInvitation(bob, invitation.id)).resolves.toMatchObject({
+      status: 'declined',
+    });
+    await expect(service.listPendingGroupInvitations(bob)).resolves.toEqual([]);
+    await expect(repository.findMember(group.id, bob.id)).resolves.toBeUndefined();
+  });
+
   it('rejects invalid types and debt-backed member removal', async () => {
     const repository = new InMemorySocialRepository();
-    const identity: IdentityDirectory = { resolveIdentifier: () => resolved(bob) };
+    const identity = identityDirectory(() => resolved(bob));
     const ledger: SocialLedgerAdapter = {
       pairBalance: () =>
         resolved({
@@ -226,7 +304,7 @@ describe('SocialService group lifecycle', () => {
 
   it('supports every group type, link acceptance, and admin-only removal/dissolution', async () => {
     const repository = new InMemorySocialRepository();
-    const identity: IdentityDirectory = { resolveIdentifier: () => resolved(bob) };
+    const identity = identityDirectory(() => resolved(bob));
     const ledger: SocialLedgerAdapter = {
       pairBalance: () =>
         resolved({

@@ -78,6 +78,7 @@ describe('InMemorySocialRepository atomic operations', () => {
     const member = await repository.acceptGroupInvitation(
       'invite-1',
       'bob',
+      'bob@example.test',
       '2026-01-01T00:01:00.000Z',
       '2026-01-01T00:01:00.000Z',
     );
@@ -85,6 +86,7 @@ describe('InMemorySocialRepository atomic operations', () => {
       await repository.acceptGroupInvitation(
         'invite-1',
         'bob',
+        'bob@example.test',
         '2026-01-01T00:02:00.000Z',
         '2026-01-01T00:02:00.000Z',
       ),

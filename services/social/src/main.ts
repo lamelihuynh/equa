@@ -11,6 +11,8 @@ import {
   UnavailableIdentityDirectory,
   type IdentityDirectory,
 } from './identity-adapter.js';
+import { SocialOutboxPublisher } from './outbox.publisher.js';
+import { AmqpSocialEventPublisher } from './rabbit.publisher.js';
 import {
   FailClosedLedgerAdapter,
   HttpSocialLedgerAdapter,
@@ -41,7 +43,13 @@ export async function buildServer(
   const repository = options.repository ?? createRepository();
   const identity = options.identity ?? createIdentityDirectory();
   const ledger = options.ledger ?? createLedgerAdapter();
-  const service = new SocialService(repository, identity, ledger);
+  const service = new SocialService(
+    repository,
+    identity,
+    ledger,
+    undefined,
+    process.env.APP_WEB_URL ?? 'http://localhost:3000',
+  );
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? (process.env.NODE_ENV === 'test' ? 'silent' : 'info'),
@@ -159,6 +167,9 @@ export async function buildServer(
   app.get('/v1/groups', async (request, reply) =>
     wrap(reply, async () => reply.send(await service.listGroups(user(request)))),
   );
+  app.get('/v1/groups/invitations', async (request, reply) =>
+    wrap(reply, async () => reply.send(await service.listPendingGroupInvitations(user(request)))),
+  );
   app.post('/v1/groups', async (request, reply) =>
     wrap(reply, async () => {
       const body = record(request.body);
@@ -208,6 +219,11 @@ export async function buildServer(
       reply.send(await service.acceptGroupInvitation(user(request), params(request).id)),
     ),
   );
+  app.post('/v1/groups/invitations/:id/decline', async (request, reply) =>
+    wrap(reply, async () =>
+      reply.send(await service.declineGroupInvitation(user(request), params(request).id)),
+    ),
+  );
   app.post('/v1/groups/invitations/accept', async (request, reply) =>
     wrap(reply, async () => {
       const body = record(request.body);
@@ -239,8 +255,26 @@ function ledgerCallerKey(options: SocialServerOptions): string | undefined {
 
 async function bootstrap(): Promise<void> {
   if (!process.env.IDENTITY_JWT_SECRET) return;
-  const app = await buildServer();
-  await app.listen({ port: Number(process.env.SOCIAL_PORT ?? 3005), host: '0.0.0.0' });
+  const repository = createRepository();
+  const app = await buildServer(process.env.IDENTITY_JWT_SECRET, { repository });
+  const rabbitUrl = repository instanceof SocialDatabase ? process.env.RABBITMQ_URL : undefined;
+  const rabbit = rabbitUrl ? new AmqpSocialEventPublisher(rabbitUrl) : undefined;
+  const stopOutbox =
+    rabbit && repository instanceof SocialDatabase
+      ? new SocialOutboxPublisher(repository, rabbit).start()
+      : undefined;
+  await app.listen({
+    port: Number(process.env.PORT ?? process.env.SOCIAL_PORT ?? 3005),
+    host: '0.0.0.0',
+  });
+  const shutdown = async (): Promise<void> => {
+    stopOutbox?.();
+    await rabbit?.close();
+    await app.close();
+    if (repository instanceof SocialDatabase) await repository.close();
+  };
+  process.once('SIGINT', () => void shutdown());
+  process.once('SIGTERM', () => void shutdown());
 }
 void bootstrap();
 

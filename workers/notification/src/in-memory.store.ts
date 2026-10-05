@@ -31,7 +31,10 @@ export class InMemoryNotificationStore implements NotificationStore {
       });
     return Promise.resolve('inserted');
   }
-  claimDue(now: Date): Promise<ClaimedNotificationJob | undefined> {
+  claimDue(
+    now: Date,
+    supportedTypes?: readonly string[],
+  ): Promise<ClaimedNotificationJob | undefined> {
     for (const candidate of this.jobs.values()) {
       if (
         candidate.attempts >= 8 &&
@@ -48,6 +51,7 @@ export class InMemoryNotificationStore implements NotificationStore {
       .filter(
         (candidate) =>
           candidate.attempts < 8 &&
+          (!supportedTypes || supportedTypes.includes(candidate.type)) &&
           ((candidate.status === 'pending' && candidate.availableAt <= now) ||
             (candidate.status === 'leased' &&
               candidate.leaseUntil !== undefined &&

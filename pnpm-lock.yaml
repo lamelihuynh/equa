@@ -313,6 +313,9 @@ importers:
       '@equa/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      amqplib:
+        specifier: 0.10.9
+        version: 0.10.9
       dotenv:
         specifier: 17.2.2
         version: 17.2.2
@@ -329,6 +332,9 @@ importers:
         specifier: 0.2.2
         version: 0.2.2
     devDependencies:
+      '@types/amqplib':
+        specifier: 0.10.7
+        version: 0.10.7
       '@types/pg':
         specifier: 8.15.5
         version: 8.15.5
@@ -347,6 +353,9 @@ importers:
       dotenv:
         specifier: 17.2.2
         version: 17.2.2
+      nodemailer:
+        specifier: 7.0.6
+        version: 7.0.6
       pg:
         specifier: 8.16.3
         version: 8.16.3
@@ -354,6 +363,9 @@ importers:
       '@types/amqplib':
         specifier: 0.10.7
         version: 0.10.7
+      '@types/nodemailer':
+        specifier: 7.0.0
+        version: 7.0.0
       '@types/pg':
         specifier: 8.15.5
         version: 8.15.5

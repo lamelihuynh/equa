@@ -2,10 +2,28 @@ export type GroupType = 'trip' | 'household' | 'event' | 'other';
 export type FriendRequestStatus = 'pending' | 'accepted' | 'rejected';
 export type GroupInvitationKind = 'email' | 'link';
 
-export interface SocialUser {
-  id: string;
+export interface HumanIdentity {
+  id?: string;
+  displayName?: string;
   email?: string;
   username?: string;
+}
+
+export interface SocialUser extends HumanIdentity {
+  id: string;
+}
+
+export interface FriendshipView extends Friendship {
+  friend: SocialUser;
+}
+
+export interface FriendRequestView extends FriendRequest {
+  requester: SocialUser;
+  target?: HumanIdentity;
+}
+
+export interface GroupMemberView extends GroupMember {
+  user: SocialUser;
 }
 
 export interface FriendRequest {
@@ -52,9 +70,19 @@ export interface GroupInvitation {
   targetEmail?: string;
   targetUserId?: string;
   token?: string;
-  status: 'pending' | 'accepted' | 'revoked';
+  status: 'pending' | 'accepted' | 'declined' | 'revoked';
   createdAt: string;
   acceptedAt?: string;
+}
+
+export interface PendingGroupInvitation {
+  invitation: GroupInvitation;
+  group: Pick<Group, 'id' | 'name' | 'type'>;
+}
+
+export interface GroupInvitationView extends GroupInvitation {
+  group: Pick<Group, 'id' | 'name' | 'type'>;
+  inviter: SocialUser;
 }
 
 export interface PairBalance {

@@ -1,4 +1,8 @@
-import type { DomainEvent, NotificationJob } from '@equa/contracts';
+import {
+  GROUP_INVITATION_CREATED_EVENT,
+  type DomainEvent,
+  type NotificationJob,
+} from '@equa/contracts';
 
 const maxAttempts = 8;
 
@@ -12,7 +16,10 @@ export interface NotificationStore {
     event: DomainEvent,
     jobs: readonly NotificationJob[],
   ): Promise<'inserted' | 'duplicate'>;
-  claimDue(now: Date): Promise<ClaimedNotificationJob | undefined>;
+  claimDue(
+    now: Date,
+    supportedTypes?: readonly string[],
+  ): Promise<ClaimedNotificationJob | undefined>;
   complete(deliveryId: string, leaseToken: string): Promise<void>;
   retry(
     deliveryId: string,
@@ -25,6 +32,7 @@ export interface NotificationStore {
 
 export interface NotificationProvider {
   readonly enabled: boolean;
+  readonly supportedTypes?: readonly string[];
   deliver(job: NotificationJob, idempotencyKey: string): Promise<void>;
 }
 export interface RabbitMessage {
@@ -63,7 +71,7 @@ export class NotificationWorker {
   }
   async deliverOne(): Promise<void> {
     if (!this.provider.enabled) return;
-    const job = await this.store.claimDue(this.now());
+    const job = await this.store.claimDue(this.now(), this.provider.supportedTypes);
     if (!job) return;
     try {
       await this.provider.deliver(job, job.deliveryId);
@@ -114,6 +122,29 @@ export class NotificationWorker {
 }
 
 function notificationJobsFor(event: DomainEvent): NotificationJob[] {
+  if (event.type === GROUP_INVITATION_CREATED_EVENT) {
+    const payload = event.payload;
+    if (
+      typeof payload.invitationId !== 'string' ||
+      payload.invitationId !== event.id ||
+      typeof payload.recipientEmail !== 'string' ||
+      !payload.recipientEmail.trim() ||
+      typeof payload.groupName !== 'string' ||
+      typeof payload.inviterName !== 'string' ||
+      typeof payload.inviterEmail !== 'string' ||
+      typeof payload.appUrl !== 'string'
+    )
+      throw new Error('Group invitation event is missing email delivery details.');
+    return [
+      {
+        eventId: event.id,
+        deliveryId: `notification:${event.id}:${event.ownerId}`,
+        ownerId: event.ownerId,
+        type: event.type,
+        payload: { ...payload },
+      },
+    ];
+  }
   if (event.type !== 'expense.created' && event.type !== 'expense.updated') return [];
   const actorId = event.payload.actorId;
   if (typeof actorId !== 'string') return [];

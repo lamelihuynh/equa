@@ -1,4 +1,9 @@
 import { randomBytes } from 'node:crypto';
+import {
+  AUTOMATION_CONTRACT_VERSION,
+  GROUP_INVITATION_CREATED_EVENT,
+  type GroupInvitationCreatedEvent,
+} from '@equa/contracts';
 
 import { SocialError } from './errors.js';
 import type { IdentityDirectory } from './identity-adapter.js';
@@ -19,6 +24,13 @@ import type {
   GroupMember,
   GroupType,
   PairBalance,
+  FriendshipView,
+  FriendRequestView,
+  GroupInvitationView,
+  GroupMemberView,
+  HumanIdentity,
+  PendingGroupInvitation,
+  SocialUser,
 } from './types.js';
 
 export interface AuthenticatedSocialUser {
@@ -45,6 +57,7 @@ export class SocialService {
     private readonly identity: IdentityDirectory,
     private readonly ledger: SocialLedgerAdapter,
     private readonly now: () => Date = () => new Date(),
+    private readonly appWebUrl = 'http://localhost:3000',
   ) {}
 
   async sendFriendRequest(
@@ -183,8 +196,29 @@ export class SocialService {
     }
   }
 
-  async listFriendRequests(actor: AuthenticatedSocialUser): Promise<FriendRequest[]> {
-    return this.repository.listFriendRequests(actor.id);
+  async listFriendRequests(actor: AuthenticatedSocialUser): Promise<FriendRequestView[]> {
+    const requests = await this.repository.listFriendRequests(actor.id);
+    const profiles = await this.resolveProfiles([
+      actor.id,
+      ...requests.flatMap((request) => [request.requesterId, request.targetUserId ?? '']),
+    ]);
+    const currentUser = profiles.get(actor.id) ?? { id: actor.id, email: actor.email };
+    return requests.map((request) => {
+      const target: HumanIdentity | undefined = request.targetUserId
+        ? (profiles.get(request.targetUserId) ?? { id: request.targetUserId })
+        : normalizeIdentifier(request.targetEmail ?? '') === normalizeIdentifier(actor.email)
+          ? currentUser
+          : request.targetEmail
+            ? { email: request.targetEmail }
+            : request.targetIdentifier
+              ? { username: request.targetIdentifier }
+              : undefined;
+      return {
+        ...request,
+        requester: profiles.get(request.requesterId) ?? { id: request.requesterId },
+        ...(target ? { target } : {}),
+      };
+    });
   }
 
   async removeFriend(actor: AuthenticatedSocialUser, friendId: string): Promise<void> {
@@ -266,7 +300,7 @@ export class SocialService {
     groupId: string,
     input: InviteInput,
   ): Promise<GroupInvitation> {
-    const group = await this.requireMember(actor.id, groupId);
+    const group = await this.requireAdmin(actor.id, groupId);
     if (group.dissolvedAt) throw new SocialError('GROUP_DISSOLVED', 'Group is dissolved.', 409);
     const identifier = input.identifier?.trim();
     if (input.kind === 'email' && (!identifier || !isEmail(identifier)))
@@ -278,9 +312,13 @@ export class SocialService {
       throw new SocialError('INVALID_INVITATION', 'Link invitations do not accept an identifier.');
     let targetUserId: string | undefined;
     let targetEmail: string | undefined;
+    let targetProfile: SocialUser | undefined;
     if (identifier) {
       const resolved = await this.identityCall(() => this.identity.resolveIdentifier(identifier));
-      targetUserId = resolved?.id;
+      if (!resolved)
+        throw new SocialError('IDENTITY_NOT_FOUND', 'The invited account was not found.', 404);
+      targetProfile = resolved;
+      targetUserId = resolved.id;
       targetEmail =
         (resolved?.email ? normalizeIdentifier(resolved.email) : undefined) ??
         (isEmail(identifier) ? normalizeIdentifier(identifier) : undefined);
@@ -290,7 +328,13 @@ export class SocialService {
         throw new SocialError('GROUP_MEMBER_EXISTS', 'User is already a group member.', 409);
     }
     const existing = await this.repository.findPendingInvitation(group.id, input.kind, identifier);
-    if (existing) return existing;
+    if (existing) {
+      if (input.kind === 'email' && targetProfile && targetEmail)
+        await this.repository.ensureOutboxEvent(
+          await this.invitationCreatedEvent(existing, group, actor, targetProfile, targetEmail),
+        );
+      return existing;
+    }
     const invitation: GroupInvitation = {
       id: newId(),
       groupId: group.id,
@@ -304,7 +348,18 @@ export class SocialService {
       createdAt: this.now().toISOString(),
     };
     try {
-      await this.repository.createInvitation(invitation);
+      if (input.kind === 'email' && targetProfile && targetEmail) {
+        const event = await this.invitationCreatedEvent(
+          invitation,
+          group,
+          actor,
+          targetProfile,
+          targetEmail,
+        );
+        await this.repository.createInvitationWithEvent(invitation, event);
+      } else {
+        await this.repository.createInvitation(invitation);
+      }
       return invitation;
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -313,7 +368,13 @@ export class SocialService {
           input.kind,
           identifier,
         );
-        if (existing) return existing;
+        if (existing) {
+          if (input.kind === 'email' && targetProfile && targetEmail)
+            await this.repository.ensureOutboxEvent(
+              await this.invitationCreatedEvent(existing, group, actor, targetProfile, targetEmail),
+            );
+          return existing;
+        }
       }
       throw error;
     }
@@ -328,31 +389,24 @@ export class SocialService {
       (await this.repository.findInvitationByToken(invitationIdOrToken));
     if (!invitation)
       throw new SocialError('GROUP_INVITATION_NOT_FOUND', 'Invitation was not found.', 404);
+    if (invitation.kind === 'link' && invitation.token !== invitationIdOrToken)
+      throw new SocialError(
+        'GROUP_INVITATION_FORBIDDEN',
+        'A valid invitation link is required.',
+        403,
+      );
+    if (invitation.kind === 'email' && !isInvitationRecipient(invitation, actor.id, actor.email))
+      throw new SocialError(
+        'GROUP_INVITATION_FORBIDDEN',
+        'This invitation is addressed to another identity.',
+        403,
+      );
     if (invitation.status === 'accepted') {
       const existing = await this.repository.findMember(invitation.groupId, actor.id);
       if (existing) return existing;
     }
     if (invitation.status !== 'pending')
       throw new SocialError('GROUP_INVITATION_CLOSED', 'Invitation is no longer pending.', 409);
-    if (
-      invitation.kind === 'email' &&
-      normalizeIdentifier(invitation.targetEmail ?? '') !== normalizeIdentifier(actor.email)
-    )
-      throw new SocialError(
-        'GROUP_INVITATION_FORBIDDEN',
-        'This invitation is addressed to another identity.',
-        403,
-      );
-    if (
-      invitation.kind === 'email' &&
-      invitation.targetUserId &&
-      invitation.targetUserId !== actor.id
-    )
-      throw new SocialError(
-        'GROUP_INVITATION_FORBIDDEN',
-        'This invitation is addressed to another identity.',
-        403,
-      );
     const group = await this.repository.findGroup(invitation.groupId);
     if (!group || group.dissolvedAt)
       throw new SocialError('GROUP_DISSOLVED', 'Group is unavailable.', 409);
@@ -361,14 +415,62 @@ export class SocialService {
     return this.repository.acceptGroupInvitation(
       invitation.id,
       actor.id,
+      actor.email,
       this.now().toISOString(),
       this.now().toISOString(),
     );
   }
 
-  async listGroupMembers(actor: AuthenticatedSocialUser, groupId: string): Promise<GroupMember[]> {
+  async declineGroupInvitation(
+    actor: AuthenticatedSocialUser,
+    invitationId: string,
+  ): Promise<GroupInvitation> {
+    const invitation = await this.repository.findInvitation(invitationId);
+    if (!invitation)
+      throw new SocialError('GROUP_INVITATION_NOT_FOUND', 'Invitation was not found.', 404);
+    if (invitation.kind !== 'email' || !isInvitationRecipient(invitation, actor.id, actor.email))
+      throw new SocialError(
+        'GROUP_INVITATION_FORBIDDEN',
+        'This invitation is addressed to another identity.',
+        403,
+      );
+    if (invitation.status === 'declined') return invitation;
+    if (invitation.status !== 'pending')
+      throw new SocialError('GROUP_INVITATION_CLOSED', 'Invitation is no longer pending.', 409);
+    const declined = await this.repository.declineGroupInvitation(
+      invitation.id,
+      actor.id,
+      actor.email,
+    );
+    if (declined) return declined;
+    const current = await this.repository.findInvitation(invitation.id);
+    if (current?.status === 'declined') return current;
+    throw new SocialError('GROUP_INVITATION_CLOSED', 'Invitation is no longer pending.', 409);
+  }
+
+  async listPendingGroupInvitations(
+    actor: AuthenticatedSocialUser,
+  ): Promise<GroupInvitationView[]> {
+    const rows = await this.repository.listPendingInvitationsForUser(actor.id, actor.email);
+    const profiles = await this.resolveProfiles(rows.map(({ invitation }) => invitation.inviterId));
+    return rows.map(({ invitation, group }: PendingGroupInvitation) => ({
+      ...invitation,
+      group,
+      inviter: profiles.get(invitation.inviterId) ?? { id: invitation.inviterId },
+    }));
+  }
+
+  async listGroupMembers(
+    actor: AuthenticatedSocialUser,
+    groupId: string,
+  ): Promise<GroupMemberView[]> {
     await this.requireMember(actor.id, groupId);
-    return this.repository.listMembers(groupId);
+    const members = await this.repository.listMembers(groupId);
+    const profiles = await this.resolveProfiles(members.map((member) => member.userId));
+    return members.map((member) => ({
+      ...member,
+      user: profiles.get(member.userId) ?? { id: member.userId },
+    }));
   }
 
   async listGroups(actor: AuthenticatedSocialUser): Promise<Group[]> {
@@ -419,8 +521,16 @@ export class SocialService {
     return Boolean(await this.repository.findFriendship(userA, userB));
   }
 
-  async listFriends(actor: AuthenticatedSocialUser): Promise<Friendship[]> {
-    return this.repository.listFriendships(actor.id);
+  async listFriends(actor: AuthenticatedSocialUser): Promise<FriendshipView[]> {
+    const friendships = await this.repository.listFriendships(actor.id);
+    const friendIds = friendships.map((friendship) =>
+      friendship.userA === actor.id ? friendship.userB : friendship.userA,
+    );
+    const profiles = await this.resolveProfiles(friendIds);
+    return friendships.map((friendship) => {
+      const friendId = friendship.userA === actor.id ? friendship.userB : friendship.userA;
+      return { ...friendship, friend: profiles.get(friendId) ?? { id: friendId } };
+    });
   }
 
   private async requireMember(userId: string, groupId: string): Promise<Group> {
@@ -474,6 +584,52 @@ export class SocialService {
     }
   }
 
+  private async resolveProfiles(userIds: readonly string[]): Promise<Map<string, SocialUser>> {
+    const ids = [...new Set(userIds.filter(Boolean))];
+    if (!ids.length) return new Map();
+    const profiles = new Map<string, SocialUser>();
+    for (let start = 0; start < ids.length; start += 100) {
+      try {
+        for (const profile of await this.identity.resolveUsers(ids.slice(start, start + 100)))
+          profiles.set(profile.id, profile);
+      } catch {
+        // Identity is display enrichment; a directory outage must not hide Social-owned records.
+      }
+    }
+    return profiles;
+  }
+
+  private async invitationCreatedEvent(
+    invitation: GroupInvitation,
+    group: Group,
+    actor: AuthenticatedSocialUser,
+    recipient: SocialUser,
+    recipientEmail: string,
+  ): Promise<GroupInvitationCreatedEvent> {
+    if (!invitation.targetUserId)
+      throw new SocialError('IDENTITY_NOT_FOUND', 'The invited account was not found.', 404);
+    const inviter = (await this.resolveProfiles([actor.id])).get(actor.id);
+    const inviterEmail = inviter?.email ?? actor.email;
+    return {
+      version: AUTOMATION_CONTRACT_VERSION,
+      id: invitation.id,
+      type: GROUP_INVITATION_CREATED_EVENT,
+      occurredAt: invitation.createdAt,
+      ownerId: invitation.targetUserId,
+      producer: 'social',
+      payload: {
+        invitationId: invitation.id,
+        groupId: group.id,
+        groupName: group.name,
+        groupType: group.type,
+        inviterName: inviter?.displayName?.trim() || inviterEmail,
+        inviterEmail,
+        recipientEmail: recipient.email ?? recipientEmail,
+        appUrl: new URL('/groups', this.appWebUrl).toString(),
+      },
+    };
+  }
+
   private async withLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
     const previous = this.locks.get(key) ?? Promise.resolve();
     let release!: () => void;
@@ -493,6 +649,15 @@ export class SocialService {
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function isInvitationRecipient(
+  invitation: GroupInvitation,
+  actorId: string,
+  actorEmail: string,
+): boolean {
+  if (invitation.targetUserId) return invitation.targetUserId === actorId;
+  return normalizeIdentifier(invitation.targetEmail ?? '') === normalizeIdentifier(actorEmail);
 }
 
 function isUniqueViolation(error: unknown): boolean {

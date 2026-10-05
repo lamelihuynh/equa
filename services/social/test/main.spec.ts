@@ -24,6 +24,14 @@ describe('Social HTTP boundary', () => {
         Promise.resolve(
           value.includes('bob') ? { id: 'bob', email: 'bob@example.test' } : undefined,
         ),
+      resolveUsers: (ids) =>
+        Promise.resolve(
+          ids.map((id) => ({
+            id,
+            displayName: id === 'alice' ? 'Alice' : 'Bob',
+            email: id === 'alice' ? 'alice@example.test' : 'bob@example.test',
+          })),
+        ),
     };
     const ledger: SocialLedgerAdapter = {
       pairBalance: () =>
@@ -112,6 +120,170 @@ describe('Social HTTP boundary', () => {
     expect(dissolved.statusCode).toBe(204);
     const afterDissolve = await app.inject({ method: 'GET', url: '/v1/groups', headers: auth });
     expect(afterDissolve.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('lists recipient-owned invitations, accepts/declines safely, and exposes member identities', async () => {
+    const repository = new InMemorySocialRepository();
+    const identities = [
+      { id: 'alice', displayName: 'Alice Nguyen', email: 'alice@example.test' },
+      { id: 'bob', displayName: 'Bob Tran', email: 'bob@example.test' },
+      { id: 'carol', displayName: 'Carol Le', email: 'carol@example.test' },
+    ];
+    const identity: IdentityDirectory = {
+      resolveIdentifier: (identifier) =>
+        Promise.resolve(
+          identities.find(
+            (candidate) =>
+              candidate.email === identifier.toLowerCase() ||
+              candidate.displayName.toLowerCase() === identifier.toLowerCase(),
+          ),
+        ),
+      resolveUsers: (ids) =>
+        Promise.resolve(identities.filter((candidate) => ids.includes(candidate.id))),
+    };
+    const ledger: SocialLedgerAdapter = {
+      pairBalance: () =>
+        Promise.resolve({
+          userId: 'alice',
+          counterpartyId: 'bob',
+          netMinor: '0',
+          currency: 'VND',
+          hasOutstandingDebt: false,
+        }),
+      hasOutstandingDebt: () => Promise.resolve(false),
+      hasOutstandingGroupDebt: () => Promise.resolve(false),
+    };
+    const app = await buildServer('secret', { repository, identity, ledger });
+    const aliceAuth = {
+      authorization: `Bearer ${await token('secret', 'alice', 'alice@example.test')}`,
+    };
+    const bobAuth = {
+      authorization: `Bearer ${await token('secret', 'bob', 'bob@example.test')}`,
+    };
+    const carolAuth = {
+      authorization: `Bearer ${await token('secret', 'carol', 'carol@example.test')}`,
+    };
+
+    expect((await app.inject({ method: 'GET', url: '/v1/groups/invitations' })).statusCode).toBe(
+      401,
+    );
+    const groupResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/groups',
+      headers: aliceAuth,
+      payload: { name: 'Weekend', type: 'trip' },
+    });
+    const groupId = groupResponse.json<{ id: string }>().id;
+    const invitationResponse = await app.inject({
+      method: 'POST',
+      url: `/v1/groups/${groupId}/invitations`,
+      headers: aliceAuth,
+      payload: { kind: 'email', identifier: 'bob@example.test' },
+    });
+    expect(invitationResponse.statusCode).toBe(201);
+    const invitationId = invitationResponse.json<{ id: string }>().id;
+    expect(invitationResponse.json()).not.toHaveProperty('token');
+    const pending = await app.inject({
+      method: 'GET',
+      url: '/v1/groups/invitations',
+      headers: bobAuth,
+    });
+    expect(pending.json()).toMatchObject([
+      {
+        id: invitationId,
+        group: { id: groupId, name: 'Weekend' },
+        inviter: { displayName: 'Alice Nguyen', email: 'alice@example.test' },
+      },
+    ]);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/v1/groups/invitations/${invitationId}/accept`,
+          headers: carolAuth,
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/v1/groups/invitations/${invitationId}/accept`,
+          headers: bobAuth,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/v1/groups/invitations',
+          headers: bobAuth,
+        })
+      ).json(),
+    ).toEqual([]);
+    const members = await app.inject({
+      method: 'GET',
+      url: `/v1/groups/${groupId}/members`,
+      headers: aliceAuth,
+    });
+    expect(members.json()).toMatchObject([
+      { userId: 'alice', user: { displayName: 'Alice Nguyen' } },
+      { userId: 'bob', user: { displayName: 'Bob Tran' } },
+    ]);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/v1/groups/${groupId}/invitations`,
+          headers: bobAuth,
+          payload: { kind: 'email', identifier: 'carol@example.test' },
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    const declinedResponse = await app.inject({
+      method: 'POST',
+      url: `/v1/groups/${groupId}/invitations`,
+      headers: aliceAuth,
+      payload: { kind: 'email', identifier: 'carol@example.test' },
+    });
+    const declinedId = declinedResponse.json<{ id: string }>().id;
+    const duplicateResponse = await app.inject({
+      method: 'POST',
+      url: `/v1/groups/${groupId}/invitations`,
+      headers: aliceAuth,
+      payload: { kind: 'email', identifier: 'CAROL@example.test' },
+    });
+    expect(duplicateResponse.json<{ id: string }>().id).toBe(declinedId);
+    expect(repository.invitations.size).toBe(2);
+    expect(repository.outbox.size).toBe(2);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/v1/groups/invitations/${declinedId}/accept`,
+          headers: bobAuth,
+        })
+      ).statusCode,
+    ).toBe(403);
+    const decline = await app.inject({
+      method: 'POST',
+      url: `/v1/groups/invitations/${declinedId}/decline`,
+      headers: carolAuth,
+    });
+    expect(decline.json<{ status: string }>().status).toBe('declined');
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/v1/groups/invitations',
+          headers: carolAuth,
+        })
+      ).json(),
+    ).toEqual([]);
+    expect(await repository.findMember(groupId, 'carol')).toBeUndefined();
     await app.close();
   });
 });

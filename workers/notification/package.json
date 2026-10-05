@@ -16,10 +16,12 @@
     "@equa/contracts": "workspace:*",
     "amqplib": "0.10.9",
     "dotenv": "17.2.2",
+    "nodemailer": "7.0.6",
     "pg": "8.16.3"
   },
   "devDependencies": {
     "@types/amqplib": "0.10.7",
+    "@types/nodemailer": "7.0.0",
     "@types/pg": "8.15.5",
     "tsx": "4.23.12"
   }
