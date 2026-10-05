@@ -1,4 +1,4 @@
-# Zero-cost, staging-only topology. Four Free web services and one Free Postgres.
+# Zero-cost, staging-only class-test topology. Five Free web services and one Free Postgres.
 # Free web services are public; application JWT/service-key checks and local rate limits
 # protect direct service URLs. Service-to-service requests use HTTPS hostnames.
 projects:
@@ -32,6 +32,11 @@ projects:
                 fromService:
                   type: web
                   name: equa-staging-demo-ledger
+                  envVarKey: RENDER_EXTERNAL_HOSTNAME
+              - key: AUTOMATION_EXTERNAL_HOSTNAME
+                fromService:
+                  type: web
+                  name: equa-staging-demo-automation
                   envVarKey: RENDER_EXTERNAL_HOSTNAME
 
           - type: web
@@ -124,6 +129,7 @@ projects:
               - fromGroup: equa-staging-social-ledger-key
               - fromGroup: equa-staging-ledger-social-key
               - fromGroup: equa-staging-feed-key
+              - fromGroup: equa-staging-automation-key
               - key: LEDGER_DATABASE_URL
                 fromDatabase:
                   name: equa-staging-demo-postgres
@@ -132,6 +138,35 @@ projects:
                 fromService:
                   type: web
                   name: equa-staging-demo-social
+                  envVarKey: RENDER_EXTERNAL_HOSTNAME
+
+          - type: web
+            name: equa-staging-demo-automation
+            runtime: node
+            plan: free
+            region: singapore
+            branch: staging/demo
+            rootDir: .
+            autoDeployTrigger: checksPass
+            healthCheckPath: /health
+            buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @equa/automation-sync-service... build
+            startCommand: |
+              set -eu
+              export LEDGER_URL="https://${LEDGER_EXTERNAL_HOSTNAME}"
+              pnpm --filter @equa/automation-sync-service db:migrate
+              exec pnpm --filter @equa/automation-sync-service start
+            envVars:
+              - fromGroup: equa-staging-runtime
+              - fromGroup: equa-staging-jwt
+              - fromGroup: equa-staging-automation-key
+              - key: AUTOMATION_SYNC_DATABASE_URL
+                fromDatabase:
+                  name: equa-staging-demo-postgres
+                  property: connectionString
+              - key: LEDGER_EXTERNAL_HOSTNAME
+                fromService:
+                  type: web
+                  name: equa-staging-demo-ledger
                   envVarKey: RENDER_EXTERNAL_HOSTNAME
 
         databases:
@@ -171,4 +206,8 @@ projects:
           - name: equa-staging-feed-key
             envVars:
               - key: LEDGER_FEED_CURSOR_SECRET
+                generateValue: true
+          - name: equa-staging-automation-key
+            envVars:
+              - key: AUTOMATION_SYNC_SERVICE_KEY
                 generateValue: true

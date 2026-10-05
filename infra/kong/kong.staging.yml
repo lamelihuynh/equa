@@ -62,3 +62,12 @@ services:
           - /v1/expenses
           - /v1/categories
         strip_path: false
+
+  - name: automation-sync-service
+    url: https://${AUTOMATION_EXTERNAL_HOSTNAME}
+    routes:
+      - name: automation-sync-routes
+        paths:
+          - /v1/sync
+          - /v1/recurring
+        strip_path: false

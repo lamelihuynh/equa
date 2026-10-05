@@ -1,63 +1,53 @@
-# Equa Staging / Lecturer Demo
+# Equa Staging / Class Test Deployment Plan
 
-This is a temporary public demo, not production. The current candidate uses only free plans; no Render or Vercel resources have been created or modified.
+This plan targets a temporary public **STAGING / CLASS TEST** environment, not production. Current provider inventory and gates are recorded in `docs/STAGING_DEPLOY_STATE.md`. No cloud resources have been created.
 
-## Minimum topology
+## Required topology
 
-| Component               | Classification                   | Candidate                         | Demo notes                                                                                                |
-| ----------------------- | -------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Web                     | REQUIRED                         | Vercel Hobby, root `apps/web`     | Deploy the GitHub `staging/demo` branch; use its generated `.vercel.app` hostname.                        |
-| Gateway                 | REQUIRED                         | Render Free Web service           | The browser uses only this HTTPS URL. Kong Admin API stays disabled.                                      |
-| Identity                | REQUIRED                         | Render Free Web service           | JWT auth remains required. Public registration needs a configured verified-email provider.                |
-| Social                  | REQUIRED                         | Render Free Web service           | Owns `equa_social`; in-app friend/group flows remain available.                                           |
-| Ledger                  | REQUIRED                         | Render Free Web service           | Owns `equa_ledger`; all financial writes still go through Ledger.                                         |
-| PostgreSQL              | REQUIRED                         | One Render Free Postgres instance | Three logical databases; 1 GB and 30-day lifetime.                                                        |
-| Automation & Sync       | OPTIONAL                         | Omitted                           | Current public Web demo has no recurring/offline-sync UI. Mobile is not deployed.                         |
-| Notification / RabbitMQ | OPTIONAL                         | Omitted                           | Group invitations remain in-app; external invite email is not needed for the public demo.                 |
-| Redis / Key Value       | NOT REQUIRED                     | Omitted                           | Staging Kong rate limiting uses one-instance local counters.                                              |
-| Avatar object storage   | NOT REQUIRED                     | Omitted                           | `AVATAR_STORAGE_ENABLED=false`; avatar upload reports unavailable.                                        |
-| Identity email          | REQUIRED FOR PUBLIC REGISTRATION | Resend Free, after setup          | Identity cannot verify newly registered users without a real provider. No verification bypass is allowed. |
+| Component               | Plan                                                                   | Why it is needed                                                                    | State                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Web                     | Vercel Hobby                                                           | Registration/login and the public class-test UI                                     | New project in the authenticated `ti-ky-s-projects` scope; use a generated `.vercel.app` URL |
+| Gateway                 | Render Free Web                                                        | Single public API entry point for Web and Mobile                                    | Add HTTPS routes for Identity, Social, Ledger, and Automation & Sync                         |
+| Identity                | Render Free Web                                                        | Registration, verified email, login, profile                                        | Resend verified sender and API key are required; never bypass verification                   |
+| Social                  | Render Free Web                                                        | Friends, groups, memberships, in-app invitations                                    | Owns `equa_social`; uses Identity/Ledger HTTP adapters                                       |
+| Ledger                  | Render Free Web                                                        | Expense source of truth and supported balances                                      | Owns `equa_ledger`; mutations stay in Ledger                                                 |
+| Automation & Sync       | Render Free Web                                                        | Required for Mobile persistent offline queue replay and sync feed                   | Owns `equa_automation_sync`; uses Ledger internal API                                        |
+| PostgreSQL              | One Render Free Postgres                                               | Persistent staging data                                                             | Separate logical databases for each deployed service                                         |
+| Notification / RabbitMQ | Omitted from the $0 base plan unless a Free, safe deployment is proven | Group invitation lifecycle is in-app; registration email is sent by Identity/Resend | Group invitation email and Ledger event delivery are not claimed when omitted                |
+| Redis / Key Value       | Omitted                                                                | Kong uses a single-instance local rate-limit policy                                 | Counters reset when Gateway restarts                                                         |
+| Avatar storage          | Omitted                                                                | Not required for class acceptance                                                   | Keep `AVATAR_STORAGE_ENABLED=false`                                                          |
 
-## Zero-cost plan and trade-offs
+The committed `render.yaml` was prepared for the smaller lecturer demo. The current working-tree version adds a Free Automation & Sync service, its service-owned database target/key, and Kong `/v1/sync`/recurring routes. Render CLI validation reports a valid 15-action plan; no resources have been created. Notification/RabbitMQ remain omitted from the $0 base plan.
 
-| Resource                                                  | Plan                     |        Monthly base cost | Limits and trade-off                                                                                                                                                     |
-| --------------------------------------------------------- | ------------------------ | -----------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Vercel Web                                                | Hobby                    |                       $0 | Personal/non-commercial use; included usage limits apply.                                                                                                                |
-| Gateway, Identity, Social, Ledger                         | Render Free Web          |                       $0 | Four services share 750 workspace instance-hours/month; each sleeps after 15 minutes and may take about a minute to wake. Free services have public `onrender.com` URLs. |
-| Postgres                                                  | Render Free              |                       $0 | One instance/workspace, 1 GB, no backups, expires after 30 days.                                                                                                         |
-| Redis, RabbitMQ, Notification, Automation, object storage | Omitted                  |                       $0 | Their optional public-demo behavior is unavailable.                                                                                                                      |
-| Identity verification mail                                | Resend Free, if eligible | $0 within provider quota | Requires a Resend account, verified sender domain, and API key; free quota is currently 3,000 messages/month and 100/day.                                                |
+## Zero-cost constraints
 
-The Render Free tier is suitable only for a short, low-volume demo. Free services can be restarted, cold-start, or suspended at quota limits. Outbound bandwidth/build overages may incur costs if billing is enabled; do not add a payment method or upgrade a plan for this setup. The Vercel Hobby plan is limited to personal/non-commercial use. See [Render Free limits](https://render.com/docs/free), [Vercel Hobby](https://vercel.com/docs/plans/hobby), and [Resend pricing](https://resend.com/pricing).
+- Create only explicit Vercel Hobby and Render Free resources. Do not add a payment method, upgrade, or create a paid resource.
+- Vercel Hobby is limited to personal/non-commercial use. Use this only as a course demo.
+- Render Free Web services share workspace instance-hour quotas, sleep when idle, and have public provider hostnames. Render Free Postgres is temporary, has limited storage, and has no backups.
+- EAS Free includes a limited low-priority build quota and does not charge overages. If the quota is exhausted, wait for reset; do not upgrade.
+- Resend may have a free quota, but it still requires an account, verified sender domain, and API key. Do not purchase a domain or provider plan automatically.
+- Production remains **NOT READY**.
 
-## Boundaries and data
+See [Render Free limits](https://render.com/docs/free), [Vercel Hobby](https://vercel.com/docs/plans/hobby), [EAS plans](https://docs.expo.dev/billing/plans/), and [EAS pricing](https://expo.dev/pricing).
 
-Render Free Web services cannot receive private-network traffic. The backend Web services therefore have public hostnames; the browser calls same-origin `/v1/*` paths on Vercel, which rewrites server-side to Kong. This preserves Identity's existing `/v1/auth` refresh-cookie path and avoids third-party cookies. Direct API routes still require JWTs or service keys. Social-to-Identity/Ledger and Ledger-to-Social calls use HTTPS between Render hostnames. This public-upstream arrangement is a demo compromise; production remains **NOT READY**.
+## Boundaries and client routing
 
-Postgres remains one server with separate logical databases:
-
-- Identity: `equa_identity`
-- Social: `equa_social`
-- Ledger: `equa_ledger`
-
-Each service's code targets its own database name. The current Blueprint uses the server's default database credential for those URLs, so database-user isolation is not a production security boundary. There are no cross-service queries or foreign keys.
-
-Render Free Web does not support paid pre-deploy commands. Identity, Social, and Ledger therefore run their idempotent migrations in their start commands. Social and Ledger create their own logical databases when absent. The three services currently use the Postgres instance's default credential with distinct database names; app code does not query another service's database, but database-user isolation is not provided. See [Render deploy steps](https://render.com/docs/deploys).
-
-Kong allows one exact `WEB_ORIGIN`, applies correlation IDs and request-size limits, and uses local per-instance rate limits. Its counter resets on restart. PostgreSQL is referenced over Render's same-region private connection. No secret is included in Git.
+- Ledger remains the source of truth for financial data. No cross-service database access or cross-service foreign keys.
+- The browser uses same-origin `/v1/*` rewrite paths to the public HTTPS Gateway. This preserves the existing Identity refresh-cookie path.
+- Mobile uses `EXPO_PUBLIC_API_BASE_URL=https://<gateway-host>/v1` from the EAS `preview` environment. The app rejects missing, insecure, and localhost API URLs outside development. The URL is public configuration, not a secret.
+- Render Free Web hostnames are publicly reachable. JWTs protect user APIs; service keys protect internal Identity/Social/Ledger/Automation routes. Kong Admin must not be exposed.
+- Set Gateway `WEB_ORIGIN` to the exact Vercel origin. Mobile native traffic is not browser CORS traffic.
+- Keep service-owned logical databases: `equa_identity`, `equa_social`, `equa_ledger`, and `equa_automation_sync`. Create `equa_notification` only if Notification is actually deployed.
 
 ## Deployment sequence
 
-1. Validate and push the reviewed local `staging/demo` source; wait for CI and CodeQL.
-2. Configure Resend with a verified sender and store its key in Render secrets. The initial Blueprint sync requests it; do not bypass email verification.
-3. Create and connect the Vercel project `equa-web-staging` to `lamelihuynh/equa`, branch `staging/demo`, root `apps/web`. Use the actual assigned `.vercel.app` URL. A personal-repository import may require authorization from its owner.
-4. Set Render `WEB_ORIGIN` and `APP_WEB_URL` to the Vercel origin, validate the Free-only Blueprint and review its full resource diff, then sync it in `equa-staging-demo/staging`.
-5. Confirm the Postgres owner can create the Social and Ledger databases; each service runs its idempotent migration at startup.
-6. After the Gateway hostname exists, set Vercel `EQUA_GATEWAY_URL` to it and `NEXT_PUBLIC_API_BASE_URL=/v1`; deploy Web and verify HTTPS/no localhost requests.
-7. Run public health/security smoke, then the two-account Web E2E. Publish `docs/PUBLIC_DEMO.md` only after that E2E passes.
+1. Resolve the Resend sender/API-key gate and Expo/EAS CLI account gate. Never paste secrets into chat.
+2. Add the Automation Free web service, its owned database URL/key, and its Gateway routes; validate the complete Blueprint plan and verify every resource is Free.
+3. Create the new Vercel project `equa-demo-web` in the current authorized scope, root `apps/web`, branch `staging/demo`. If Git import blocks, deploy the checked-out source directly. Do not use `equa1/equa-web-staging` or change DNS.
+4. Set Render `WEB_ORIGIN` and `APP_WEB_URL` to the generated Vercel origin. Configure Identity with `EMAIL_PROVIDER=resend`, matching `EMAIL_FROM`, and `RESEND_API_KEY` in provider secret storage.
+5. Create the Free Render Postgres and services in dependency order: Identity, Social, Ledger, Automation, then Gateway. Run each service's own migration and record the result.
+6. Configure Vercel `EQUA_GATEWAY_URL` and `NEXT_PUBLIC_API_BASE_URL=/v1`. Set the EAS `preview` environment variable `EXPO_PUBLIC_API_BASE_URL` to the public Gateway URL.
+7. Verify public HTTPS, CORS, rate limits, protected internal endpoints, secret exclusion from Web/Mobile bundles, and public health.
+8. Run real two-account Web acceptance and Android preview APK acceptance. Do not substitute local behavior for public or native evidence.
 
-Do not reuse `staging.equa.io.vn` or `api-staging.equa.io.vn`; their DNS points to projects outside the currently authenticated provider scopes. Do not change their DNS.
-
-## Current stop conditions
-
-Resend account/sender setup is required before synthetic users can register and verify. The Vercel Hobby scope is not the GitHub repository owner; verify the Git connection can be authorized before connecting the project. If either provider requests owner authorization, stop at that request. No paid resource is in this plan.
+Do not reuse `staging.equa.io.vn` or `api-staging.equa.io.vn`; their existing DNS points to resources outside the authorized scopes. Do not modify those records.

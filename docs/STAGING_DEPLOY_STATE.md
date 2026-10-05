@@ -1,69 +1,76 @@
-# STAGING / LECTURER DEMO Deployment Checkpoint
+# STAGING / CLASS TEST Deployment Checkpoint
 
-Updated: 2026-10-05. No credentials are recorded here.
+Updated: 2026-10-05 (Asia/Saigon). No credentials are recorded here.
 
-## Current step
+## Current phase
 
-The zero-cost candidate topology and source changes are validated and locally committed. The Web label regression test and Free topology commits are on `staging/demo`; deployment/checkpoint docs are committed too. No resources, migrations, deploys, DNS changes, or pushes have occurred. The branch is ready for its authorized normal push.
+Public class-test deployment has not started. Self-service registration/email verification requires a verified Resend sender and API key; neither is configured and no Render service exists to hold the secret. Mobile class-test screens/API adapters are implemented locally and pass package checks. EAS CLI configuration requires Expo account login. These are the current external gates.
 
 ## Source and worktree
 
-| Item                     | Current state                                                                                                        |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| Branch / source revision | `staging/demo` / `a2536bceb25469c70d488b98378c57a65ed335ba`                                                          |
-| Remote branch            | `origin/staging/demo` absent; `origin/feature/automation-sync` remains `0043ee64680a346eb816db05bb9ad52f1d46521c`    |
-| Recent staging commits   | `637b2fd` Web label test; `a2536bc` Free topology; `89d18fc` deployment docs; earlier app/docs commits are ancestors |
-| Worktree                 | Only pre-existing generated/report artifacts remain uncommitted; excluded from the staging branch                    |
-| Push/merge/reset/clean   | Local commits made; no push, merge, reset, or clean performed                                                        |
+| Item                | Current state                                                                                                                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Branch / local HEAD | `staging/demo` / `31c2e007583ed19c77d9c05d891e0bc3e332446d`                                                                                                                                   |
+| Remote              | `origin/staging/demo` points to the same SHA                                                                                                                                                  |
+| Source comparison   | `staging/demo` is 11 commits ahead of `feature/automation-sync` at `0043ee64680a346eb816db05bb9ad52f1d46521c`; staging contains the newer Web identity/invitation changes and deployment prep |
+| Worktree            | Dirty; preserve the listed generated/checkpoint/report files and generic AGENTS/CLAUDE files                                                                                                  |
+| Git discipline      | No commit, push, merge, reset, or clean during this reconciliation                                                                                                                            |
 
-Do not stage `apps/web/AGENTS.md`, `apps/web/CLAUDE.md`, `apps/web/tsconfig.tsbuildinfo`, or `reports/weekly/**`.
+## Provider inventory (fresh read-only check)
 
-## Provider inventory
+- Render CLI is authenticated to workspace `equa` (`tea-db1jlktg1s2s73agmkog`). Projects, services, and Postgres lists are empty. The CLI does not expose the workspace billing plan. No resources were created.
+- Vercel CLI is authenticated as `tikyisme`; the current `ti-ky-s-projects` scope is Hobby. It contains one unrelated project and no Equa project. Leave that project untouched.
+- The inaccessible `equa1/equa-web-staging` scope is not required and must not be modified. No DNS was changed.
+- The current local `.env` selects `EMAIL_PROVIDER=mailpit`; it has no `RESEND_API_KEY`. This proves no local key is configured, not whether a Resend account exists.
 
-- Render CLI workspace `equa`: no Equa projects, services, Postgres, or Key Value. The current CLI does not expose the workspace billing plan; the Free-only Blueprint validates with 13 create/update actions.
-- Vercel Hobby scope: no Equa project and no domains; one unrelated project is present. The old Web/API CNAMEs point to a Vercel project and Render gateway outside these scopes and are not reused.
-- GitHub integration can read `lamelihuynh/equa`; local Git has push permission. Remote `staging/demo` is absent. No Vercel or Render connector tools are exposed in this session, so the authenticated CLIs are the approved fallback.
-- Connected GitHub identity is `TiKyisme`, while the repository owner is `lamelihuynh`. Vercel Hobby personal-repository import may require owner authorization; no Vercel Git connection has been attempted.
-- Resend credentials and a verified sender are not available. Public registration cannot complete until the provider is set up; email verification will not be bypassed.
+## Scope and resource plan
 
-## Minimum-cost candidate
+The committed `render.yaml` remains the earlier lecturer-demo candidate. The local working tree now adds a Free Automation & Sync service, its service key/database target, and Kong `/v1/sync`/recurring routes. Automation startup/migration retargets the default Postgres URL to `equa_automation_sync` and checks `CREATEDB`; Render CLI reports a valid 15-action Blueprint plan. No resources have been created or migrated. Notification/RabbitMQ remain omitted from the $0 base plan; invitation lifecycle remains in-app, and outbox delivery is not claimed.
 
-| Resource                                                         | Count | Cost | Status                                   |
-| ---------------------------------------------------------------- | ----: | ---: | ---------------------------------------- |
-| Vercel Hobby Web                                                 |     1 |   $0 | No Equa project yet                      |
-| Render Free Web: Gateway, Identity, Social, Ledger               |     4 |   $0 | Blueprint candidate                      |
-| Render Free Postgres                                             |     1 |   $0 | 1 GB; expires after 30 days; no backups  |
-| Redis, RabbitMQ, Notification worker, Automation, avatar storage |     0 |   $0 | Omitted as optional for the browser demo |
+Only USD 0 staging resources are authorized. Vercel Hobby is the current authorized Web scope; Render resources must explicitly use Free plans. The new deployment should use default provider hostnames; do not add custom domains or modify old DNS. No paid resource, production change, or deployment has occurred.
 
-Base monthly resource cost is **USD 0** within free-tier quotas. Render Free Web services share 750 monthly workspace-hours, sleep after 15 idle minutes, cold-start, and are public. Vercel Hobby is intended for personal/non-commercial use. Free-tier expiration, quota suspension, and outbound/build usage risks prevent any production claim. Render's live docs: [Free limits](https://render.com/docs/free); Vercel: [Hobby plan](https://vercel.com/docs/plans/hobby).
+Mobile has an internal preview APK profile in `apps/mobile/eas.json` using the EAS `preview` environment and `android.buildType=apk`. Set `EXPO_PUBLIC_API_BASE_URL` in EAS `preview` only after the public Gateway URL exists. The client rejects missing/HTTP/localhost values in non-development builds. The Expo Free plan offers a limited low-priority build quota with no overage; if the quota is exhausted, wait for reset instead of upgrading.
+
+## Database state
+
+- No staging Postgres, logical databases, or remote migrations exist.
+- Local PostgreSQL service migrations and local PostgreSQL/RabbitMQ scenarios have historical evidence in `docs/INTEGRATION_TESTING.md`; that is not staging evidence.
+- Preserve database ownership: Identity, Social, Ledger, Automation, and Notification may access only their own databases.
+
+## URLs and distribution
+
+Frontend: none.
+Gateway: none.
+Android APK/EAS URL: none.
 
 ## Validation
 
-| Check                                                    | Result                                                                                         |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Render account inventory                                 | PASS: selected workspace lists no Equa resources                                               |
-| Vercel account inventory                                 | PASS: no Equa project/domain in authenticated scope                                            |
-| Render Blueprint validation                              | PASS: valid, 13 actions; no paid plan requested                                                |
-| Frozen install                                           | PASS                                                                                           |
-| Web tests/typecheck/lint/build                           | PASS: 15 tests; Vercel rewrite build used a dummy HTTPS Gateway URL                            |
-| Social tests/typecheck/lint/build                        | PASS: 26 tests                                                                                 |
-| Identity tests/typecheck/lint/build                      | PASS: 15 tests; existing non-fatal Vite config warning                                         |
-| Ledger tests/typecheck/lint/build                        | PASS: 28 tests                                                                                 |
-| Contracts tests/typecheck/lint/build                     | PASS: 5 tests                                                                                  |
-| Kong Free Docker build/config parse/shell syntax         | PASS                                                                                           |
-| Targeted Prettier / scaffold / Compose / diff check      | PASS                                                                                           |
-| Root `pnpm format:check`                                 | FAIL only on untracked `reports/weekly/.build/report_print.css`; excluded from staging commits |
-| Render resource sync, database migrations, public deploy | NOT RUN                                                                                        |
-| GitHub CI/CodeQL for `staging/demo`                      | NOT RUN; branch is not pushed                                                                  |
-| Public Web/API E2E, security smoke, Resend delivery      | NOT RUN                                                                                        |
+| Area                                    | Result                                              |
+| --------------------------------------- | --------------------------------------------------- |
+| Render workspace/resource inventory     | PASS: authenticated workspace; no Equa resources    |
+| Vercel account/scope inventory          | PASS: Hobby scope; no Equa project                  |
+| Git source                              | PASS: local and remote `staging/demo` at `31c2e00`  |
+| Render Blueprint validation             | PASS: valid 15-action Free-only candidate           |
+| Kong staging image/config               | PASS: Docker build, shell syntax, config parse      |
+| Automation package checks               | PASS: 42 tests, typecheck, lint, build              |
+| Automation DB ownership helper          | PASS: unit coverage; live Postgres/CREATEDB NOT RUN |
+| Render/Vercel deployment                | NOT RUN                                             |
+| Staging migrations                      | NOT RUN                                             |
+| Public registration/email verification  | BLOCKED: Resend sender/API key not configured       |
+| Public Web/Mobile E2E                   | NOT RUN                                             |
+| Mobile local tests/typecheck/lint/build | PASS: 53 tests; package checks pass                 |
+| EAS config/profile inspection           | BLOCKED: CLI requires Expo account login            |
+| Android APK and device validation       | NOT RUN                                             |
+| Production readiness                    | NOT READY                                           |
 
-## Next actions
+Historical local test/build evidence remains in `docs/PROJECT_EXECUTION_STATE.md` and `docs/INTEGRATION_TESTING.md`; do not report it as public or native validation.
 
-1. Verify `origin/staging/demo` remains absent, push normally, and wait for CI/CodeQL.
-2. Before initial Blueprint sync, configure Resend with a verified sender and store its API key in Render secrets; do not paste the key into chat or docs.
-3. Create/connect the Vercel project to the exact GitHub repo/branch. If the personal-repository owner authorization is required, stop and request it; do not reassign existing domains.
-4. Set Render `WEB_ORIGIN` and `APP_WEB_URL` to the generated Vercel origin, then sync only the validated Free Blueprint after reviewing its complete resource diff. Never create or upgrade paid resources.
-5. Once Render assigns a Gateway URL, set Vercel `EQUA_GATEWAY_URL` to it and `NEXT_PUBLIC_API_BASE_URL=/v1` so browser auth cookies stay same-origin through the rewrite.
-6. Confirm the Postgres owner can create the Social and Ledger databases; review migrations, deploy health, then run public E2E/security smoke.
+## Exact human action
 
-`docs/PUBLIC_DEMO.md` remains deferred until public MVP E2E and security smoke pass. Production remains **NOT READY**.
+1. Create or authorize a Resend account.
+2. Add and verify a sender domain you control; do not alter the existing staging/API CNAME records.
+3. Create a sending API key and keep it private. Do not paste it into chat.
+4. Reply that the sender is verified and the key is ready for secure entry into Render secrets; the next deployment pass will configure Identity's `RESEND_API_KEY` and matching `EMAIL_FROM`.
+5. Authorize an Expo account for EAS CLI (for example, run `pnpm dlx eas-cli login` from `apps/mobile`). Do not send Expo credentials or access tokens in chat.
+
+The local Automation database-ownership fix and Free-only topology validate; after the provider gates, recheck provider state, configure the EAS preview Gateway URL, and continue migrations/deployments/acceptance. Production remains **NOT READY**.

@@ -1,6 +1,6 @@
 # Equa V1 production readiness
 
-Assessment snapshot: 2026-10-05, branch `staging/demo` (local, not pushed). This is a repository, local-runtime, and read-only partial-staging assessment, not production approval or deployment.
+Assessment snapshot: 2026-10-05, branch `staging/demo` at `31c2e007583ed19c77d9c05d891e0bc3e332446d` (pushed). This is a repository, local-runtime, and read-only provider assessment, not production approval or deployment.
 
 ## Decision
 

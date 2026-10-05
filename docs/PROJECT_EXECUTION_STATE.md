@@ -1,113 +1,164 @@
-# Current Phase
+# Equa Project Execution State
 
-Phase 12 — Safe commit execution complete locally (no push or merge)
+## Last Updated
 
-# Phase Status
+2026-10-05 (Asia/Saigon)
 
-Phases 3–9 are complete. Phase 10 Docker-backed migrations, backend/browser flows, and final code checks passed. Phase 11 stabilized the Web invitation and money parsing flows and inventoried the diff. Phase 12 created ten ordered conventional local commits, ran per-component checks, and passed the final workspace tests, lint, typecheck, build, detector, scaffold, Compose, and diff checks. The generated generic `apps/web/AGENTS.md` and `apps/web/CLAUDE.md` remain untracked by explicit Phase 12 instruction. `pnpm format:check` still fails on its documented baseline files; actionlint was unavailable in this environment. FR-REC-001 supports single-unit ISO date periods anchored to UTC `startsAt`, clamped to the last valid month/year day. Expense notifications persist one job per newly added participant; delivery remains disabled. Exact supplied FR/BR statements are in `docs/BACKEND_COMPLETENESS.md`. Native Expo/device validation, provider delivery, staging, and backup/restore remain NOT RUN; production is NOT READY.
+## Current Goal
 
-# Completed Phases
+Deliver a public STAGING / CLASS TEST release: complete the supported Web and Mobile MVP, connect both clients to the public Gateway, produce an Android distribution build, and run real public acceptance tests. Production remains NOT READY.
 
-Phase 3: created the 29-ID requirement matrix and ownership inventory from the source available then. Phase 10 supplied additional exact statements and the current matrix reclassifies each item from live/source evidence.
+## Current Branch
 
-Existing EQUA-4, Local Demo, Identity/Social, and CI/CD work is pre-existing working-tree content and is not attributed to this run.
+`staging/demo` is the current deployment/source candidate. It is newer than `feature/automation-sync` and contains the Web identity/invitation work plus deployment preparation. Do not switch branches without rechecking the diff.
 
-Phase 4A: added member-scoped group listing and caller-authorized active expense listing, fixed owner-only expense totals, constrained Social migration target to `equa_social`, and corrected the legacy Identity test to check the email-only query.
+## Current HEAD
 
-Phase 4B: added a three-second abort timeout to internal Identity/Ledger/Social HTTP adapters. Adapter layers do not retry requests; existing service schedulers/queues retain typed retry ownership.
+- Local: `31c2e007583ed19c77d9c05d891e0bc3e332446d`
+- `origin/staging/demo`: same SHA
+- `feature/automation-sync`: `0043ee64680a346eb816db05bb9ad52f1d46521c`
+- `develop`: `4ff198e092562cbeb46b2882f5629a9badb4e3fd`
 
-Phase 4C: exhausted recurring executions now become `dead`; transient SQLite wake-state reads schedule a bounded recovery; Rabbit consumer catches rejected asynchronous ingest/ack paths and reconnects.
+## Working Tree
 
-Phase 5: authenticated Web profile/friends/groups/expenses/dashboard flows use the shared API client and Gateway-backed Identity/Social/Ledger routes. `Local Demo` requires an explicit login-page action and remains separate browser storage. The manual flow is documented; no live browser/API clickthrough is claimed.
+DIRTY. Current task changes are local and uncommitted:
 
-Phase 6: added sync/auth request deadlines, fail-closed refresh-rotation handling without replaying an ambiguous refresh token, owner-scoped quarantine restoration on re-authentication, non-consuming deferral while auth is unavailable, visible conflict summaries with an authenticated server discard endpoint, and sequence-safe dependent queue resolution.
+- Mobile: `apps/mobile/App.tsx`, `apps/mobile/eas.json`, `apps/mobile/src/**`
+- Automation/Deployment: Automation database targeting, `render.yaml`, Kong staging template/start script
+- Docs: execution/deployment/environment/readiness checkpoints
+- Preserve pre-existing/generated: `apps/web/next-env.d.ts`, `apps/web/tsconfig.tsbuildinfo`, `apps/web/AGENTS.md`, `apps/web/CLAUDE.md`, `reports/`
+  Do not stage or remove the pre-existing generated/report/AGENTS/CLAUDE files.
 
-Phase 7: confirmed there is no Testcontainers/browser E2E harness, added a runnable cross-service procedure, clarified actual CI integration coverage, and added the missing Notification `db:migrate` script. The real scenario remains NOT RUN.
+## Completed Phases
 
-Phase 8 audit: CodeQL and weekly Dependabot config exist; container images run non-root but use mutable base tags; app OTel instrumentation, backup/PITR, broad staging targets, and container scanning/signing are absent. Kong owns gateway CORS/body/rate-limit/correlation config but not JWT verification. Automation previously had no health route. Docker daemon remains unavailable.
+- Prior Phase 3–12 work implemented and validated the service-owned Social/Ledger flows, local Web API-mode flows, Identity-aware human labels, in-app group invitations, and Mobile durable local expense cache/outbox foundations.
+- `staging/demo` carries the latest staging candidate. Its 11 commits after `feature/automation-sync` include Web identity/invitation UX, Kong/Render preparation, and deployment documentation.
+- Earlier local evidence is recorded in `docs/INTEGRATION_TESTING.md` and below; it is not public-staging or native-Mobile evidence.
+- Phase 5 local Mobile work now adds overview, friends, groups/invitations, expenses CRUD, readable labels, explicit API configuration and version-checked offline delete while preserving the existing SecureStore and SQLite/outbox flow.
+- Current branch CI and Security were previously reported passing at this SHA; refresh those checks before any future push/release.
 
-Phase 8: added structured/redacted request logging and validated UUID correlation IDs for Social, Ledger, and Automation & Sync; added Automation liveness/readiness checks backed by a DB ping; added safe scheduler, worker, and Rabbit recovery diagnostics with capped reconnect backoff; clarified actual security controls and added an operations procedure. Docker-backed readiness, RabbitMQ, staging, and backup/restore were not run.
+## Current Phase
 
-Phase 9: reviewed the 29-ID matrix and phase evidence, corrected the stale Ledger expense-list evidence, created a release checklist, and classified the repository `NOT READY`. No deployment, browser/device run, provider delivery, database/broker integration, or restore drill was performed.
+Phase 4 audit and local Phase 5 Mobile implementation are complete. The expanded local Phase 9 candidate includes Automation & Sync, its owned database target, and Kong sync routes. Mobile/Automation checks, 15-action Free Blueprint validation, and Kong image/config parsing pass. Resend blocks public registration; Expo account authorization blocks EAS profile/build. No cloud resource has been provisioned.
 
-Phase 10 Step 1: reconciled 22 supplied FR statements and BR-004/005/010/013; split/balance/debt/settlement semantics remain blocked where the brief says not to infer them. Statuses now distinguish DONE/PARTIAL/MISSING/BLOCKED.
+## Current Architecture
 
-Phase 10 Steps 2–8: Docker Desktop is reachable and the Equa Compose infrastructure was already healthy. Created the missing `equa_automation_sync` logical DB in the existing local volume; all five service migrations passed, including Automation migration 004 for recurring anchors and Notification migration 003 for recipient-specific jobs. Live Identity→Social→Ledger→Automation→RabbitMQ→Notification and Chrome Web flows passed. Added participant IDs to Ledger events and recipient-specific Notification jobs; duplicate replay and multi-recipient PostgreSQL fan-out were verified. Added weekly/monthly/yearly/custom ISO date periods; a live P1M occurrence completed once and advanced from its UTC anchor. Fixed the PostgreSQL NUL-byte advisory-lock defect; enabled Web group image/edit/dissolve and friend balances; added Mobile SQLite group/expense cache plus durable offline create/edit caller. Mobile device/emulator validation is NOT RUN because `adb` is unavailable.
+Web and Mobile call the Kong Gateway. Identity owns accounts/profiles, Social owns friendships/groups/invitations, Ledger owns financial data, and Automation & Sync owns recurring/sync state. Each service uses its own logical database; no cross-service data queries are allowed. Automation's migration/runtime now retargets Render's default Postgres URL to `equa_automation_sync` and rejects URLs owned by another service. Ledger publishes transactional outbox events; Notification handles delivery. Notification/RabbitMQ remain omitted from the $0 base plan because in-app invitations are canonical; outbox delivery is not claimed.
 
-Phase 11: audited the complete current diff and untracked inventory without changing Git history. Fixed the Web group invitation handler's post-`await` form access and rejected malformed comma-formatted amounts in API and Local Demo parsers. Added regression tests; a headless Chrome API-mode invite smoke passed with no page errors. Added `docs/CHANGESET_REVIEW.md` with the path inventory, sensitive-data audit, validation status, risks, and proposed independent commit order. No commit, push, merge, reset, or clean was performed.
+## Current Feature Status
 
-Phase 12: committed the validated C1–C9 groups in dependency order, then committed the final execution checkpoint as C10. Identity, Social, Ledger, Contracts, Automation, Notification, Web, Mobile, CI, and docs gates passed before their commits. The final workspace gates passed after C9 and were repeated after C10. No push, merge, rebase, reset, or clean was performed. The two generic Next guidance files were left untracked and were not deleted.
+| Area                 | Status  | Evidence / remaining work                                                                                                                                                                                         |
+| -------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web MVP              | PARTIAL | Local API-mode flows and human-readable identity/in-app invitations have prior local evidence. Public URL, class registration/verification, and public E2E are NOT RUN.                                           |
+| Mobile MVP           | PARTIAL | Local screens/adapters cover auth/profile, friends, groups/invitations, expense CRUD, overview, readable labels, and SQLite/outbox create/edit/delete. Public Gateway URL, EAS APK, and native validation remain. |
+| Backend              | PARTIAL | Core local PostgreSQL/RabbitMQ cross-service flows have historical evidence. Public deployment, migrations, and health/security smoke are NOT RUN.                                                                |
+| Email                | BLOCKED | Local Mailpit is configured. Public registration needs a verified sender and Resend API key; no key is configured in the local environment.                                                                       |
+| Android distribution | NOT RUN | No APK/EAS distribution URL. Check EAS authorization and local Android tooling after resuming.                                                                                                                    |
+| Public staging       | NOT RUN | No Render Equa resources, staging databases, public URLs, or Vercel Equa project.                                                                                                                                 |
 
-# Canonical Decisions
+## Mobile Audit Matrix
 
-- Follow `docs/ARCHITECTURE.md` and `docs/SERVICE_OWNERSHIP.md` as current architecture maps.
-- Ledger remains the financial source of truth; each service owns its database; no cross-service DB access.
-- Local browser demo persistence is not server truth. Notification provider, Platform product behavior, and Insights remain unimplemented/deferred unless source evidence changes this.
-- Do not infer requirement behavior beyond source documents or implementation evidence.
+| Feature              | Backend available?                           | Web available?   | Mobile implemented?                                                                    | Mobile tested?                                 | Gap                                                                      |
+| -------------------- | -------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------ |
+| Auth/session         | Yes: Identity login/register/refresh/profile | Yes              | Login, signup, forgot-password, SecureStore session, server logout                     | Unit tests PASS; native NOT RUN                | Email verification is through the Web link; public provider gate remains |
+| Profile              | Yes: Identity profile/avatar routes          | Yes              | Profile edit and avatar upload action                                                  | Typecheck/lint PASS; native NOT RUN            | Staging avatar storage is disabled; present provider errors clearly      |
+| Friends/requests     | Yes: Social routes                           | Yes              | List, send, accept/reject, remove, on-demand supported balance                         | API tests PASS; native NOT RUN                 | Public two-account flow NOT RUN                                          |
+| Groups/invitations   | Yes: Social routes                           | Yes              | List/detail/create/edit, member roles, email invite, accept/decline, remove/dissolve   | API tests PASS; native NOT RUN                 | Public two-account flow NOT RUN                                          |
+| Expenses             | Yes: Ledger routes                           | Yes              | Online create/edit/soft-delete; explicit participants and payer; VND/minor-unit UI     | API/money tests PASS; native NOT RUN           | Public two-account flow NOT RUN                                          |
+| Dashboard/home       | Yes: group/expense totals                    | Yes              | Active group/expense counts, currency-separated totals and recent expenses             | Typecheck/lint PASS; native NOT RUN            | Public Gateway query NOT RUN                                             |
+| Offline cache/queue  | Yes: Automation sync/feed                    | N/A              | SQLite group/expense cache; durable create/edit/delete outbox; reconnect replay        | SQLite/sync tests PASS; native NOT RUN         | No offline friend/invitation mutation; native restart/reconnect NOT RUN  |
+| Conflict/retry       | Yes: Automation sync                         | N/A              | Automatic retry and explicit server-version conflict resolution                        | Unit tests PASS; native NOT RUN                | Native conflict UX NOT RUN                                               |
+| Public API config    | Gateway routes exist                         | Web uses Gateway | Local emulator-safe default; non-development requires HTTPS `EXPO_PUBLIC_API_BASE_URL` | Unit tests PASS                                | Set the public URL in EAS `preview` after Gateway creation               |
+| Android distribution | N/A                                          | N/A              | `eas.json` internal APK preview profile                                                | JSON syntax PASS; account-bound config NOT RUN | Expo account authorization and APK build remain                          |
 
-# Files Changed By Phase
+## Web Status
 
-- Phase 3: `docs/BACKEND_COMPLETENESS.md` (added), `docs/SERVICE_OWNERSHIP.md` (table inventory added), `docs/PROJECT_EXECUTION_STATE.md`.
-- Phase 4A: `services/social/src/social.repository.ts`, `services/social/src/database/postgres.repository.ts`, `services/social/src/social.service.ts`, `services/social/src/main.ts`, `services/social/test/main.spec.ts`, `services/social/src/database/migrate.ts`, `services/social/test/migrate.spec.ts`, `services/ledger/src/expense.service.ts`, `services/ledger/src/main.server.ts`, `services/ledger/test/expense.service.spec.ts`, `services/ledger/test/main.server.spec.ts`, `services/identity/test/auth.service.spec.ts`, `docs/BACKEND_COMPLETENESS.md`, `docs/PROJECT_EXECUTION_STATE.md`.
-- Phase 4B: `services/social/src/identity-adapter.ts`, `services/social/src/ledger-adapter.ts`, `services/social/test/identity-adapter.spec.ts`, `services/social/test/ledger-adapter.spec.ts` (added), `services/ledger/src/social-adapter.ts`, `services/ledger/test/social-adapter.spec.ts` (added), `services/automation-sync/src/ledger/ledger.adapter.ts`, `services/automation-sync/test/ledger.adapter.spec.ts`, `docs/SERVICE_OWNERSHIP.md`, `docs/BACKEND_COMPLETENESS.md`, `docs/PROJECT_EXECUTION_STATE.md`.
-- Phase 4C: `services/automation-sync/src/database/postgres.repository.ts`, `services/automation-sync/test/postgres.repository.spec.ts` (added), `apps/mobile/src/sync/sync-client.ts`, `apps/mobile/src/db/local-store.spec.ts`, `workers/notification/src/rabbit.consumer.ts`, `workers/notification/src/rabbit.consumer.spec.ts`, `docs/EQUA-4.md`, `docs/BACKEND_COMPLETENESS.md`, `docs/PROJECT_EXECUTION_STATE.md`.
-- Phase 5: `apps/web/app/api-client.ts`, `api-client.spec.ts`, `money.ts`, `money.spec.ts` (added); `apps/web/app/page.tsx`, `dashboard/page.tsx`, `profile/page.tsx`, `components/demo-shell.tsx`, `friends/page.tsx`, `groups/page.tsx`, `groups/[id]/page.tsx`, `expenses/page.tsx`, `demo.css`; `apps/web/package.json` (`@equa/contracts` workspace link), `pnpm-lock.yaml`, `docs/WEB_MVP_RUNBOOK.md` (added), `docs/SERVICE_OWNERSHIP.md`, `docs/BACKEND_COMPLETENESS.md`, `docs/PROJECT_EXECUTION_STATE.md`. Next dev generated `apps/web/AGENTS.md` and `apps/web/CLAUDE.md`; both remain in the working tree.
-- Phase 6: `apps/mobile/App.tsx`, `apps/mobile/src/auth/session.ts`, `session.spec.ts`, `auth-api.ts`, `auth/login-handoff.ts`, `auth/login-handoff.spec.ts`, `api/sync-api.ts`, `api/sync-api.spec.ts`, `sync/sync-client.ts`, `db/local-store.ts`, `db/local-store.spec.ts`, `packages/contracts/src/automation.ts`, `automation.spec.ts`, `services/automation-sync/src/main.ts`, `sync/sync.service.ts`, `database/postgres.repository.ts`, Automation tests, `docs/EQUA-4.md`, `docs/BACKEND_COMPLETENESS.md`, `docs/SERVICE_OWNERSHIP.md`, `docs/PROJECT_EXECUTION_STATE.md`.
-- Phase 7: `workers/notification/package.json` (`db:migrate`), `docs/INTEGRATION_TESTING.md` (added), `docs/TESTING_STRATEGY.md`, `docs/PROJECT_EXECUTION_STATE.md`.
-- Phase 8: `services/automation-sync/src/main.ts`, `services/automation-sync/src/database/postgres.repository.ts`, `services/automation-sync/test/main.spec.ts`, `services/social/src/main.ts`, `services/social/test/main.spec.ts`, `services/ledger/src/main.server.ts`, `services/ledger/test/main.server.spec.ts`, `workers/notification/src/main.ts`, `workers/notification/src/notification.worker.ts`, `workers/notification/src/notification.worker.spec.ts`, `workers/notification/src/rabbit.consumer.ts`, `workers/notification/src/rabbit.consumer.spec.ts`, `docs/SECURITY.md`, `docs/OPERATIONS.md` (added), `docs/DEPLOYMENT.md`, `docs/ARCHITECTURE.md`, `docs/SERVICE_OWNERSHIP.md`, `docs/PROJECT_EXECUTION_STATE.md`.
-- Phase 9: `docs/PRODUCTION_READINESS.md` (added), `docs/BACKEND_COMPLETENESS.md`, `docs/PROJECT_EXECUTION_STATE.md`.
-- Phase 10: Ledger PostgreSQL repository/advisory-lock regression, event payload/type/tests; Notification recipient worker/store tests plus migration `003_notification_recipient_jobs.sql`; recurring date utility/tests plus Automation migration `004_recurring_schedule_anchor.sql`; `packages/contracts/src/automation.ts`; `services/automation-sync/test/local-demo.spec.ts`; Web friend-balance/group-image/edit/dissolve; Mobile SQLite cache/outbox UI and tests; Phase 10 requirement, integration, runbook, security, operations, and checkpoint documentation. Live tests created synthetic local service rows in the existing Compose volume.
-- Phase 11: `apps/web/app/groups/[id]/page.tsx`, `apps/web/app/money.ts`, `apps/web/app/demo-store.ts`, `apps/web/app/money.spec.ts`, `apps/web/app/demo-store.spec.ts`; updated `docs/BACKEND_COMPLETENESS.md`, `docs/INTEGRATION_TESTING.md`, `docs/PRODUCTION_READINESS.md`; added `docs/CHANGESET_REVIEW.md` and this checkpoint update.
-- Phase 12: committed the C1–C9 implementation, CI, and documentation groups; updated and committed this checkpoint in C10. `apps/web/AGENTS.md` and `apps/web/CLAUDE.md` remain intentionally untracked.
+Local API mode uses the Gateway and Local Demo is an explicit separate option. Human-readable labels and in-app group invitation UX are present in the staging source. The local API-mode browser flow is documented; public registration, verification, and class acceptance remain NOT RUN.
 
-# Validation Results
+## Mobile Status
 
-- Initial current-state checks: branch `feature/automation-sync`; working tree dirty with unrelated prior changes; no push/commit/reset performed.
-- During Phases 3–9, Docker was unavailable, so PostgreSQL/RabbitMQ runtime integration was not claimed. Docker became available in Phase 10; the scoped manual local integration is recorded below and in `docs/INTEGRATION_TESTING.md`.
-- Phase 3: completeness audit contains 29 IDs exactly once; `pnpm prettier` scoped check passed.
-- Test baseline: Contracts 4/4, Social 16/16, Ledger 21/21, Automation & Sync 23/23, Notification 8/8, Mobile 22/22 passed.
-- Initial Identity baseline: 11 passed, 1 stale SQL assertion failed; Phase 4A corrected the assertion, and the current Identity suite passes 12/12.
-- `pnpm format:check`: FAIL (the full check currently flags 10 unchanged files plus the generated `pnpm-lock.yaml`; the lockfile also fails Prettier on the committed baseline). Targeted changed source/docs/workflows formatting passes.
-- `pnpm check:compose`: PASS for Compose rendering during the earlier phase checks; Phase 10 runtime evidence is recorded separately.
-- Phase 4A: Social tests 16/16, Ledger tests 22/22, Identity tests 12/12; affected Social/Ledger/Identity typecheck, lint, and build passed; targeted Prettier and `git diff --check` passed.
-- Social and Ledger collection route tests use in-memory repositories; the PostgreSQL group-list query remains unverified against a live database.
-- Phase 4B: Social 18/18, Ledger 24/24, Automation & Sync 24/24; all three packages' typecheck, lint, and build passed; targeted Prettier and `git diff --check` passed.
-- Phase 3 Identity baseline failure was stale test SQL matching; Phase 4A corrected only that assertion, and the suite now passes 12/12.
-- Phase 4C: Automation & Sync 26/26, Mobile 23/23, Notification 9/9; affected typecheck/lint/build passed; targeted Prettier and `git diff --check` passed.
-- Phase 5: Web tests 12/12; typecheck, lint, production build, targeted Prettier and scoped `git diff --check` passed. Build generated the Web routes. Manual browser flow and live service/API requests were NOT RUN.
-- `apps/web/tsconfig.tsbuildinfo` was restored after validation; it was clean before this execution.
-- Phase 6: Contracts 5/5, Automation & Sync 29/29, Mobile 32/32; Contracts/Automation/Mobile typecheck, lint and build passed; targeted formatting and diff checks passed. PostgreSQL concurrency and native Expo/device tests are NOT RUN.
-- Phase 7: Docker client is installed but cannot reach the daemon. Compose config rendering is not an integration test. PostgreSQL/RabbitMQ/cross-service/browser E2E are NOT RUN; no Testcontainers or browser E2E harness exists in this branch.
-- Phase 8: Automation 30/30, Social 18/18, Ledger 24/24, Notification 12/12; all four typechecks, lints, and builds passed. Targeted Prettier/diff check, actionlint, scaffold check, and Compose config render passed. At that phase, Docker was unavailable; live readiness, RabbitMQ/DLQ, staging, and backup/restore were NOT RUN.
-- Phase 9: recursive workspace test/lint/typecheck/build passed across 9 packages (146 tests total; Identity emitted a non-fatal Vite config-loader warning). Actionlint, scaffold, Compose config, targeted Prettier, and `git diff --check` passed. At that phase, Docker was unavailable; PostgreSQL/RabbitMQ integration, real browser/native checks, provider delivery, staging, and backup/restore were NOT RUN.
-- Phase 10: all five service migrations pass and each service-owned `schema_migrations` table was queried. Live checks passed: two-user register/verify/login; reverse/duplicate friend request; invite duplicate/accept/member roles; friend balance/debt removal gate; PostgreSQL expense create/idempotent replay/edit/stale conflict/soft-delete/history/filtered totals; cross-instance Social duplicate constraints; recurring daily and monthly occurrence idempotency plus future-only edit/cancel; sync replay/conflict block/explicit discard/feed cursor; outbox publish and Rabbit inbox/job deduplication; recipient-targeted Notification job for an added participant; two-recipient Postgres store replay; outsider group-expense denial; category support; Chrome Web API-mode flow. The advisory-lock NUL bug is fixed. Mobile device/emulator validation remains NOT RUN.
-- Final Phase 10 gates (2026-09-29): recursive workspace tests 160/160 across 9 packages, lint, typecheck, and build passed; actionlint, scaffold, Compose config, affected-component detector tests (8/8), scoped Prettier for changed source/docs/workflows, and `git diff --check` passed. Identity emitted its non-fatal Vite config-loader warning. Root `pnpm format:check` fails on 10 unchanged files plus `pnpm-lock.yaml`; the lockfile also fails Prettier on the committed baseline. Docker services remained healthy; no containers were restarted or removed. Native Expo/device, provider delivery, staging, and backup/restore remain NOT RUN.
-- Phase 11 (2026-09-29): `pnpm test` passed 161 tests across 9 packages, including a forced uncached run; `pnpm lint` and `pnpm typecheck` passed in a forced uncached run; `pnpm build` passed with Web freshly built and other package outputs hash-cached. Affected-component tests (8/8), scaffold/Compose checks, targeted formatting, and `git diff --check` passed. Actionlint passed in the recorded earlier run; the current re-run is NOT RUN because its executable is unavailable in this environment. Full `pnpm format:check` fails on 10 unchanged files and baseline `pnpm-lock.yaml` listed in `docs/CHANGESET_REVIEW.md`. Secret-pattern review found only localhost/example and synthetic test fixtures; `.env` is ignored and absent from the worktree diff. Headless Chrome invitation smoke passed. Native Expo/device, provider delivery, staging, and backup/restore remain NOT RUN.
-- Phase 12 after C9 (2026-09-29): final `pnpm test` passed 161 tests across 9 packages; `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed; affected-component tests passed 8/8; scaffold and Compose checks passed; `git diff --check` passed. The same workspace gates were rerun after the documentation-only C10 checkpoint commit. Actionlint is NOT RUN because the executable is unavailable in this environment. Full `pnpm format:check` remains a known baseline failure (10 unchanged files plus `pnpm-lock.yaml`).
+Mobile now has five-tab navigation for overview, friends, groups, expenses, and profile. Friend requests, group create/edit/invite/accept/decline/admin controls, online expense CRUD, VND/minor-unit entry, and supported friend balances use authenticated Gateway adapters. The existing SQLite cache/outbox and conflict UI remain; offline soft delete uses the server's version-checked sync delete. The latest run passed 53/53 tests, typecheck/build, and lint. No `adb` or global `eas` command is present; EAS CLI config requires Expo account authorization. Native validation is NOT RUN.
 
-# Known Pre-existing Failures
+## Backend Status
 
-- Full `pnpm format:check` currently reports 10 unchanged files and `pnpm-lock.yaml`; leave those files untouched outside a relevant requirement.
-- The Docker daemon was unavailable during Phases 7–9; it is now available and Phase 10 live checks ran against the existing local `equa` stack.
+Identity, Social, Ledger, Automation & Sync, and Notification code exists with service ownership boundaries. Local PostgreSQL/RabbitMQ scenarios are documented as previously passed. No remote migrations or public backend deployments have run.
 
-# Open Gaps
+## Deployment Status
 
-- The Phase 10 brief supplies semantics for FR-FRD/GRP/EXP/REC/NOTI/SYNC and BR-004/005/010/013. FR-SPL/BAL/DEBT/STL details remain absent and are `BLOCKED`.
-- Settlement and named split modes lack implementation/authoritative acceptance semantics.
-- Live PostgreSQL expense lists and group-filtered totals were exercised; exhaustive filter combinations and load behavior remain untested.
-- Dissolved groups make linked Ledger expenses unreadable through current membership authorization. The supplied requirement allows dissolution but does not define post-dissolution history visibility.
-- Settlement and split methods are absent or under-specified; do not invent financial semantics. Treat these as BLOCKED until the authoritative SRS text is supplied.
-- The tested PostgreSQL/RabbitMQ vertical path now has live local evidence; this is not a full production or cross-region reliability test. Notification provider delivery remains disabled, and staging credentials/targets are external.
-- Telemetry configs exist under `infra/observability`, but no application OpenTelemetry SDK/exporter instrumentation was found. Social/Ledger/Identity health routes are liveness-only; Automation `/ready` verifies DB reachability plus Ledger/sync configuration; Notification has no HTTP listener. Production backup automation, image scanning/signing and non-Identity staging targets are not configured.
-- Web API mode now uses Gateway-backed Identity/Social/Ledger calls; Local Demo is opt-in and uses separate browser storage. Social enriches friend requests, friends, group members, and group invitations through Identity's batched internal resolver; Web prefers display name, then email, and uses a generic label if Identity is unavailable.
-- The documented Web API-mode flow was exercised in headless Chrome through Kong; native Expo/device behavior remains unrun.
-- Social persists email group invitations and their notification outbox event atomically. The authenticated invitee sees the pending invitation on `/groups` and accepts or declines there without a copied code. Local Mailpit delivery is supported; broker/provider failures do not roll back the invitation, and production email delivery is not claimed.
-- Mobile profile now exposes conflict resolution and a cached group/expense panel with offline expense create/edit calling the durable outbox. SQLite tests cover cache reopen and pending-edit protection; native UI/reconnect behavior remains NOT RUN.
+Pre-provisioning. New Vercel project in the authenticated Hobby scope and new Render Free resources are authorized for staging only, subject to $0 plans. No custom domains, old `equa1` project, or existing DNS records are to be reused or modified. Resend setup and Expo/EAS account authorization are human gates.
 
-# Hard Blockers
+## Cloud Resources
 
-No blocker to the verified local scenarios. Native Expo/device runtime is unavailable; split/settlement semantics, debt reminder policy, post-dissolution history visibility, provider delivery, and production operations still require explicit decisions/configuration.
+| Provider                                  | Resource                       | URL                                 | Plan        | State                                                  |
+| ----------------------------------------- | ------------------------------ | ----------------------------------- | ----------- | ------------------------------------------------------ |
+| Render                                    | Equa project/services/Postgres | —                                   | —           | None found in authenticated `equa` workspace           |
+| Vercel                                    | Equa Web project               | —                                   | Hobby scope | None found in authenticated `ti-ky-s-projects` account |
+| Vercel                                    | Existing unrelated project     | `vibefeed1-hcmutcuatiky.vercel.app` | Hobby       | Leave untouched                                        |
+| No external database or migration exists. |
 
-# Next Action
+## Database State
 
-Next: review the ten local commits and keep push separate. Do not push until the known repository-wide formatting failure and unavailable actionlint check are resolved. Obtain Product decisions for split/balance/debt/settlement, reminder policy, and post-dissolution history; run native Expo validation when a device/emulator is available; configure and validate provider delivery, staging, and backup/restore before any production-readiness claim. No push, merge, reset, clean, or deploy was performed.
+- Local Compose PostgreSQL is the existing local environment; prior service-owned migrations and cross-service scenarios are recorded in `docs/INTEGRATION_TESTING.md`.
+- No Render Postgres instance, staging logical database, or staging migration exists.
+- Any future staging deployment must use separate logical databases only for deployed services; never share tables or add cross-service foreign keys.
+
+## Public URLs
+
+Frontend: none.
+Gateway: none.
+Existing third-party DNS names are out of scope; do not change them.
+
+## Mobile Distribution
+
+An internal preview APK profile exists in `apps/mobile/eas.json`; configure `EXPO_PUBLIC_API_BASE_URL` in EAS `preview` after Gateway creation. EAS config inspection requires Expo account login. Expo Free has a limited low-priority build quota; no overage is charged on Free. No APK/install URL exists; device validation is NOT RUN.
+
+## Tests Passed
+
+Historical evidence (not re-run for this reconciliation):
+
+- Earlier workspace tests: 161 tests across 9 packages; lint, typecheck and build passed.
+- Local service migrations and PostgreSQL/RabbitMQ vertical scenarios passed as recorded in `docs/INTEGRATION_TESTING.md`.
+- Staging-preparation checks for Web, Social, Identity, Ledger, Contracts, Kong and Render Blueprint passed as recorded in `docs/STAGING_DEPLOY_STATE.md`.
+- Current Mobile checks: 53/53 tests; typecheck, lint, build, Expo app config, and EAS JSON syntax pass. EAS project-bound config/build and public Gateway variable are NOT RUN.
+- Current Automation checks: 42/42 tests including database ownership URL parsing; typecheck, lint, and build pass. Render Blueprint validation passes with 15 planned actions; Kong staging Docker build and substituted config parse pass. No resources were provisioned.
+- GitHub CI and Security were previously reported PASS for `31c2e00`; refresh before future release activity.
+
+## Tests Not Run
+
+- Public Web registration/verification and two-account acceptance.
+- Render staging migrations, public health/security smoke, and public Web/API E2E.
+- EAS account-bound build, Android device/emulator, public Mobile Gateway flows, offline/reconnect on device.
+- Class test bug-reporting flow and final validation matrix.
+
+## Known Bugs
+
+No newly verified bug from the state reconciliation. The current state does not establish the expanded public class-test release as ready.
+
+## Known Product Gaps
+
+Unspecified split/balance/debt/settlement semantics, debt-reminder policy, and post-dissolution expense history remain BLOCKED. Do not invent these rules. Automation now targets its own logical database in code; whether the future Render Postgres owner can create `equa_automation_sync` remains NOT RUN until that staging database exists. Notification/RabbitMQ remain omitted while in-app invitation delivery is the promised flow.
+
+## Human Decisions / Authorizations
+
+- Authorized: staging/class testing only; create NEW resources; prefer USD 0; no production, no paid resource, no custom domain.
+- Authorized: use current authenticated Vercel scope; ignore and do not modify inaccessible `equa1/equa-web-staging`; use direct-source Vercel deployment if Git import blocks.
+- Latest class-test requirement supersedes the earlier seed-only lecturer demo: self-service registration and email verification must work; pre-seeded accounts alone are insufficient.
+- Do not paste provider secrets into chat or commit them.
+
+## Current Blocker
+
+Two external gates remain: public registration requires a verified Resend sender and API key, and EAS project configuration/build requires Expo account login. The repository `.env` has `EMAIL_PROVIDER=mailpit` and no `RESEND_API_KEY`; no Render service exists yet to hold the staging secret. EAS CLI reported that an Expo user account is required. Do not paste credentials into chat.
+
+## Exact Next Action
+
+Authorize Resend sender/API-key setup and Expo EAS CLI login without sharing credentials in chat. On resume, recheck provider state, confirm Render Postgres `CREATEDB` capability during the owned Automation migration, and provision only the validated Free topology. Never bundle service secrets.
+
+## Resume Instructions
+
+1. Re-read this file and `docs/STAGING_DEPLOY_STATE.md`; inspect Git and provider state again.
+2. Continue with Resend secret setup through provider secret storage; do not bypass Identity verification.
+3. Recheck the current working-tree Blueprint and owned Automation database behavior before creating any resources; do not enable Notification/RabbitMQ unless the class-test flow requires their delivery.
+4. Provision only explicitly Free resources, run owned migrations, deploy in dependency order, then run public Web acceptance.
+5. Audit/complete Mobile, configure public Gateway, produce an Android preview APK only if EAS/local tooling is authorized and free, then run actual device tests.
+6. Keep `docs/CLASS_TEST.md`, `docs/CLASS_TEST_VALIDATION.md`, and this state file truthful. Never claim NOT RUN as PASS.
+7. Do not merge, force-push, reset, clean, modify production, or expose secrets.
