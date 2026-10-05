@@ -11,7 +11,9 @@ describe('human identity labels', () => {
   });
 
   it('falls back to email and never uses an identifier as a visible label', () => {
-    expect(humanIdentityLabel({ email: 'member@example.test' })).toBe('member@example.test');
-    expect(humanIdentityLabel({})).toBe('Người dùng Equa');
+    expect(humanIdentityLabel({ id: 'user-uuid', email: 'member@example.test' })).toBe(
+      'member@example.test',
+    );
+    expect(humanIdentityLabel({ id: 'user-uuid' })).toBe('Người dùng Equa');
   });
 });

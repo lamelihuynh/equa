@@ -1,4 +1,5 @@
 export interface HumanIdentityLabelSource {
+  id?: string;
   displayName?: string;
   email?: string;
   username?: string;
