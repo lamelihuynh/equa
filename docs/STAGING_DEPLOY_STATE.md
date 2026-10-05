@@ -4,7 +4,7 @@ Updated: 2026-10-05. No credentials are recorded here.
 
 ## Current step
 
-Prepared and validated the zero-cost candidate topology and scoped source changes. Commits `637b2fd` (Web label regression test), `a2536bc` (staging runtime/config), and `89d18fc` (deployment documentation) are local. No resources, migrations, deploys, DNS changes, or pushes have occurred. The checkpoint status update is being finalized before the authorized normal push.
+The zero-cost candidate topology and source changes are validated and locally committed. The Web label regression test and Free topology commits are on `staging/demo`; deployment/checkpoint docs are committed too. No resources, migrations, deploys, DNS changes, or pushes have occurred. The branch is ready for its authorized normal push.
 
 ## Source and worktree
 
@@ -13,7 +13,7 @@ Prepared and validated the zero-cost candidate topology and scoped source change
 | Branch / source revision | `staging/demo` / `a2536bceb25469c70d488b98378c57a65ed335ba`                                                          |
 | Remote branch            | `origin/staging/demo` absent; `origin/feature/automation-sync` remains `0043ee64680a346eb816db05bb9ad52f1d46521c`    |
 | Recent staging commits   | `637b2fd` Web label test; `a2536bc` Free topology; `89d18fc` deployment docs; earlier app/docs commits are ancestors |
-| Worktree                 | Checkpoint status update is pending; reports and generated files remain excluded                                     |
+| Worktree                 | Only pre-existing generated/report artifacts remain uncommitted; excluded from the staging branch                    |
 | Push/merge/reset/clean   | Local commits made; no push, merge, reset, or clean performed                                                        |
 
 Do not stage `apps/web/AGENTS.md`, `apps/web/CLAUDE.md`, `apps/web/tsconfig.tsbuildinfo`, or `reports/weekly/**`.
@@ -59,12 +59,11 @@ Base monthly resource cost is **USD 0** within free-tier quotas. Render Free Web
 
 ## Next actions
 
-1. Commit the validated checkpoint status update, excluding generated and report files.
-2. Verify `origin/staging/demo` remains absent, push normally, and wait for CI/CodeQL.
-3. Before initial Blueprint sync, configure Resend with a verified sender and store its API key in Render secrets; do not paste the key into chat or docs.
-4. Create/connect the Vercel project to the exact GitHub repo/branch. If the personal-repository owner authorization is required, stop and request it; do not reassign existing domains.
-5. Set Render `WEB_ORIGIN` and `APP_WEB_URL` to the generated Vercel origin, then sync only the validated Free Blueprint after reviewing its complete resource diff. Never create or upgrade paid resources.
-6. Once Render assigns a Gateway URL, set Vercel `EQUA_GATEWAY_URL` to it and `NEXT_PUBLIC_API_BASE_URL=/v1` so browser auth cookies stay same-origin through the rewrite.
-7. Confirm the Postgres owner can create the Social and Ledger databases; review migrations, deploy health, then run public E2E/security smoke.
+1. Verify `origin/staging/demo` remains absent, push normally, and wait for CI/CodeQL.
+2. Before initial Blueprint sync, configure Resend with a verified sender and store its API key in Render secrets; do not paste the key into chat or docs.
+3. Create/connect the Vercel project to the exact GitHub repo/branch. If the personal-repository owner authorization is required, stop and request it; do not reassign existing domains.
+4. Set Render `WEB_ORIGIN` and `APP_WEB_URL` to the generated Vercel origin, then sync only the validated Free Blueprint after reviewing its complete resource diff. Never create or upgrade paid resources.
+5. Once Render assigns a Gateway URL, set Vercel `EQUA_GATEWAY_URL` to it and `NEXT_PUBLIC_API_BASE_URL=/v1` so browser auth cookies stay same-origin through the rewrite.
+6. Confirm the Postgres owner can create the Social and Ledger databases; review migrations, deploy health, then run public E2E/security smoke.
 
 `docs/PUBLIC_DEMO.md` remains deferred until public MVP E2E and security smoke pass. Production remains **NOT READY**.
