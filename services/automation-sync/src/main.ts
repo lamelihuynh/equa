@@ -12,6 +12,7 @@ import { parseSyncConflictResolution, parseSyncRequest } from '@equa/contracts';
 
 import { AutomationService } from './automation/automation.service.js';
 import { PostgresScheduler } from './automation/postgres.scheduler.js';
+import { automationDatabaseConnections } from './database/connection-string.js';
 import {
   nextRecurringOccurrence,
   parseRecurringSchedule,
@@ -31,7 +32,9 @@ if (process.env.NODE_ENV !== 'test')
 
 const ledger: LedgerAdapter = createLedgerAdapter();
 const databaseUrl = process.env.AUTOMATION_SYNC_DATABASE_URL;
-const database = databaseUrl ? new AutomationDatabase(databaseUrl) : undefined;
+const database = databaseUrl
+  ? new AutomationDatabase(automationDatabaseConnections(databaseUrl).connectionString)
+  : undefined;
 const scheduler = database ? new PostgresScheduler(database, ledger) : undefined;
 const service = scheduler ? undefined : new AutomationService(ledger);
 const sync = database ? new SyncService(ledger, database) : undefined;
