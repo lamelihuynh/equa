@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 
 import { ApiClientError, apiJson, isLocalDemoSession, isRecord } from '../api-client';
 import { DemoShell } from '../components/demo-shell';
+import { humanIdentityLabel, humanIdentitySecondaryLabel } from '../identity-label';
 import {
   loadDemoState,
   newDemoId,
@@ -28,6 +29,20 @@ interface GroupDto {
   type: GroupType;
   dissolvedAt: string | null;
   updatedAt: string;
+}
+
+interface HumanIdentityDto {
+  id?: string;
+  displayName?: string;
+  email?: string;
+  username?: string;
+}
+
+interface GroupInvitationDto {
+  id: string;
+  createdAt: string;
+  group: { id: string; name: string; type: GroupType };
+  inviter: HumanIdentityDto;
 }
 
 export default function GroupsPage() {
@@ -160,8 +175,8 @@ function LocalGroupsPage() {
 function ApiGroupsPage() {
   const router = useRouter();
   const [groups, setGroups] = useState<GroupDto[]>([]);
+  const [invitations, setInvitations] = useState<GroupInvitationDto[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [invitationCode, setInvitationCode] = useState('');
   const [name, setName] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [type, setType] = useState<GroupType>('trip');
@@ -171,10 +186,16 @@ function ApiGroupsPage() {
   const [error, setError] = useState('');
 
   async function reload(): Promise<void> {
-    const value = await apiJson('groups');
+    const [value, invitationValue] = await Promise.all([
+      apiJson('groups'),
+      apiJson('groups/invitations'),
+    ]);
     if (!Array.isArray(value) || !value.every(isGroup))
       throw new Error('Social trả về danh sách nhóm không hợp lệ.');
+    if (!Array.isArray(invitationValue) || !invitationValue.every(isGroupInvitation))
+      throw new Error('Social trả về lời mời nhóm không hợp lệ.');
     setGroups(value);
+    setInvitations(invitationValue);
   }
 
   useEffect(() => {
@@ -219,24 +240,33 @@ function ApiGroupsPage() {
     }
   }
 
-  async function acceptInvitation(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    const code = invitationCode.trim();
-    if (!code) {
-      setError('Nhập mã lời mời.');
-      return;
-    }
+  async function acceptInvitation(invitation: GroupInvitationDto): Promise<void> {
     setBusy(true);
     setError('');
+    setMessage('');
     try {
-      const value = await apiJson('groups/invitations/accept', {
+      await apiJson(`groups/invitations/${encodeURIComponent(invitation.id)}/accept`, {
         method: 'POST',
-        body: JSON.stringify({ invitation: code }),
       });
-      if (!isRecord(value) || typeof value.groupId !== 'string')
-        throw new Error('Social không trả về nhóm từ lời mời.');
       await reload();
-      router.push(`/groups/${value.groupId}`);
+      setMessage(`Bạn đã tham gia nhóm ${invitation.group.name}.`);
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function declineInvitation(invitation: GroupInvitationDto): Promise<void> {
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      await apiJson(`groups/invitations/${encodeURIComponent(invitation.id)}/decline`, {
+        method: 'POST',
+      });
+      await reload();
+      setMessage(`Đã từ chối lời mời vào nhóm ${invitation.group.name}.`);
     } catch (reason) {
       setError(errorText(reason));
     } finally {
@@ -253,23 +283,58 @@ function ApiGroupsPage() {
           ＋ Tạo nhóm
         </button>
       </div>
-      <section className="contentCard demoFormCard">
-        <form className="demoInlineForm" onSubmit={(event) => void acceptInvitation(event)}>
-          <label>
-            Chấp nhận lời mời
-            <input
-              value={invitationCode}
-              onChange={(event) => setInvitationCode(event.target.value)}
-              placeholder="Nhập mã do quản trị viên chia sẻ"
-            />
-          </label>
-          <button className="outlineButton" type="submit" disabled={busy}>
-            Tham gia nhóm
-          </button>
-        </form>
-        <p className="formHint">
-          Lời mời email chưa được gửi tự động; người mời có thể chia sẻ mã lời mời.
-        </p>
+      <section className="contentCard demoSection">
+        <div className="cardHeading">
+          <div>
+            <p className="kicker">ĐANG CHỜ</p>
+            <h2>Lời mời nhóm</h2>
+          </div>
+          <b>{invitations.length}</b>
+        </div>
+        <div className="demoList">
+          {invitations.length ? (
+            invitations.map((invitation) => {
+              const inviterLabel = humanIdentityLabel(invitation.inviter);
+              return (
+                <article className="demoRow" key={invitation.id}>
+                  <div>
+                    <b>{invitation.group.name}</b>
+                    <p>
+                      Mời bởi {inviterLabel}
+                      {humanIdentitySecondaryLabel(invitation.inviter, inviterLabel)
+                        ? ` · ${humanIdentitySecondaryLabel(invitation.inviter, inviterLabel)}`
+                        : ''}
+                    </p>
+                    <p>
+                      {groupTypes.find((item) => item.value === invitation.group.type)?.label ??
+                        invitation.group.type}{' '}
+                      · {new Date(invitation.createdAt).toLocaleDateString()}
+                    </p>
+                    <span className="statusPill pending">PENDING</span>
+                  </div>
+                  <div className="rowActions">
+                    <button
+                      className="smallAction primarySmall"
+                      disabled={busy}
+                      onClick={() => void acceptInvitation(invitation)}
+                    >
+                      Chấp nhận
+                    </button>
+                    <button
+                      className="smallAction"
+                      disabled={busy}
+                      onClick={() => void declineInvitation(invitation)}
+                    >
+                      Từ chối
+                    </button>
+                  </div>
+                </article>
+              );
+            })
+          ) : (
+            <p className="emptyState">Không có lời mời nhóm đang chờ.</p>
+          )}
+        </div>
       </section>
       {showForm && (
         <section className="contentCard demoFormCard">
@@ -357,6 +422,32 @@ function isGroup(value: unknown): value is GroupDto {
       value.type === 'other') &&
     (value.dissolvedAt === null || typeof value.dissolvedAt === 'string') &&
     typeof value.updatedAt === 'string'
+  );
+}
+
+function isGroupInvitation(value: unknown): value is GroupInvitationDto {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.createdAt === 'string' &&
+    isRecord(value.group) &&
+    typeof value.group.id === 'string' &&
+    typeof value.group.name === 'string' &&
+    (value.group.type === 'trip' ||
+      value.group.type === 'household' ||
+      value.group.type === 'event' ||
+      value.group.type === 'other') &&
+    isHumanIdentity(value.inviter)
+  );
+}
+
+function isHumanIdentity(value: unknown): value is HumanIdentityDto {
+  return (
+    isRecord(value) &&
+    (value.id === undefined || typeof value.id === 'string') &&
+    (value.displayName === undefined || typeof value.displayName === 'string') &&
+    (value.email === undefined || typeof value.email === 'string') &&
+    (value.username === undefined || typeof value.username === 'string')
   );
 }
 

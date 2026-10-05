@@ -12,6 +12,7 @@ import {
   isRecord,
 } from '../../api-client';
 import { DemoShell } from '../../components/demo-shell';
+import { humanIdentityLabel, humanIdentitySecondaryLabel } from '../../identity-label';
 import {
   loadDemoState,
   newDemoId,
@@ -42,6 +43,14 @@ interface GroupMemberDto {
   groupId: string;
   userId: string;
   role: 'admin' | 'member';
+  user?: HumanIdentityDto;
+}
+
+interface HumanIdentityDto {
+  id?: string;
+  displayName?: string;
+  email?: string;
+  username?: string;
 }
 
 export default function GroupDetailPage() {
@@ -280,7 +289,6 @@ function ApiGroupDetailPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [inviteKind, setInviteKind] = useState<'email' | 'link'>('email');
   const currentId = currentUserId();
   const isAdmin = members.some((member) => member.userId === currentId && member.role === 'admin');
 
@@ -362,7 +370,7 @@ function ApiGroupDetailPage() {
     event.preventDefault();
     if (!group) return;
     const identifier = new FormData(event.currentTarget).get('identifier');
-    if (inviteKind === 'email' && (typeof identifier !== 'string' || !identifier.trim())) {
+    if (typeof identifier !== 'string' || !identifier.trim()) {
       setError('Nhập email thành viên.');
       return;
     }
@@ -372,24 +380,13 @@ function ApiGroupDetailPage() {
       const invitation = await apiJson(`groups/${encodeURIComponent(group.id)}/invitations`, {
         method: 'POST',
         body: JSON.stringify({
-          kind: inviteKind,
-          ...(inviteKind === 'email' && typeof identifier === 'string'
-            ? { identifier: identifier.trim() }
-            : {}),
+          kind: 'email',
+          identifier: identifier.trim(),
         }),
       });
-      const inviteCode = isRecord(invitation)
-        ? typeof invitation.token === 'string'
-          ? invitation.token
-          : typeof invitation.id === 'string'
-            ? invitation.id
-            : undefined
-        : undefined;
-      setMessage(
-        inviteCode
-          ? `Đã lưu lời mời. Chia sẻ mã này với thành viên: ${inviteCode}`
-          : 'Đã lưu lời mời thành viên.',
-      );
+      if (!isRecord(invitation) || typeof invitation.id !== 'string')
+        throw new Error('Social không xác nhận được lời mời.');
+      setMessage(`Đã gửi lời mời đến ${identifier.trim()}.`);
       form.reset();
     } catch (reason) {
       setError(errorText(reason));
@@ -399,7 +396,8 @@ function ApiGroupDetailPage() {
   }
 
   async function removeMember(member: GroupMemberDto): Promise<void> {
-    if (!group || !window.confirm(`Xóa ${member.userId} khỏi nhóm?`)) return;
+    const label = member.userId === currentId ? 'Bạn' : humanIdentityLabel(member.user);
+    if (!group || !window.confirm(`Xóa ${label} khỏi nhóm?`)) return;
     setBusy(true);
     setError('');
     try {
@@ -497,28 +495,15 @@ function ApiGroupDetailPage() {
           </div>
           <form className="formStack compactForm" onSubmit={(event) => void invite(event)}>
             <label>
-              Kiểu lời mời
-              <select
-                value={inviteKind}
-                onChange={(event) => setInviteKind(event.target.value as 'email' | 'link')}
+              Email thành viên
+              <input
+                name="identifier"
+                type="email"
+                placeholder="bob@example.com"
                 disabled={!isAdmin || busy}
-              >
-                <option value="email">Email</option>
-                <option value="link">Mã liên kết</option>
-              </select>
+                required
+              />
             </label>
-            {inviteKind === 'email' && (
-              <label>
-                Email
-                <input
-                  name="identifier"
-                  type="email"
-                  placeholder="bob@example.com"
-                  disabled={!isAdmin || busy}
-                  required
-                />
-              </label>
-            )}
             {isAdmin && (
               <button className="primaryBtn" disabled={busy}>
                 Tạo lời mời
@@ -548,8 +533,13 @@ function ApiGroupDetailPage() {
           {members.map((member) => (
             <article className="demoRow" key={member.userId}>
               <div>
-                <b>{member.userId === currentId ? 'Bạn' : member.userId}</b>
-                <p>Mã người dùng Equa</p>
+                <b>{member.userId === currentId ? 'Bạn' : humanIdentityLabel(member.user)}</b>
+                <p>
+                  {member.userId === currentId
+                    ? (humanIdentitySecondaryLabel(member.user, 'Bạn') ?? 'Tài khoản của bạn')
+                    : (humanIdentitySecondaryLabel(member.user, humanIdentityLabel(member.user)) ??
+                      'Thành viên Equa')}
+                </p>
                 <span className={`statusPill ${member.role === 'admin' ? 'friend' : 'pending'}`}>
                   {member.role === 'admin' ? 'ADMIN' : 'MEMBER'}
                 </span>
@@ -588,7 +578,18 @@ function isGroupMember(value: unknown): value is GroupMemberDto {
     isRecord(value) &&
     typeof value.groupId === 'string' &&
     typeof value.userId === 'string' &&
-    (value.role === 'admin' || value.role === 'member')
+    (value.role === 'admin' || value.role === 'member') &&
+    (value.user === undefined || isHumanIdentity(value.user))
+  );
+}
+
+function isHumanIdentity(value: unknown): value is HumanIdentityDto {
+  return (
+    isRecord(value) &&
+    (value.id === undefined || typeof value.id === 'string') &&
+    (value.displayName === undefined || typeof value.displayName === 'string') &&
+    (value.email === undefined || typeof value.email === 'string') &&
+    (value.username === undefined || typeof value.username === 'string')
   );
 }
 

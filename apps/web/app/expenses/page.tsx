@@ -15,6 +15,7 @@ import {
   isRecord,
 } from '../api-client';
 import { DemoShell } from '../components/demo-shell';
+import { humanIdentityLabel } from '../identity-label';
 import {
   formatMinor as formatServerMinor,
   minorDigits,
@@ -44,6 +45,25 @@ interface ApiGroup {
 interface ApiMember {
   userId: string;
   role: 'admin' | 'member';
+  user?: ApiHumanIdentity;
+}
+
+interface ApiHumanIdentity {
+  id?: string;
+  displayName?: string;
+  email?: string;
+  username?: string;
+}
+
+interface ApiFriendship {
+  userA: string;
+  userB: string;
+  friend?: ApiHumanIdentity;
+}
+
+interface ApiFriend {
+  id: string;
+  identity?: ApiHumanIdentity;
 }
 
 interface ApiCategory {
@@ -443,7 +463,7 @@ function formatInputAmount(minor: string, currency: string): string {
 function ApiExpensesPage() {
   const userId = currentUserId();
   const [groups, setGroups] = useState<ApiGroup[]>([]);
-  const [friends, setFriends] = useState<string[]>([]);
+  const [friends, setFriends] = useState<ApiFriend[]>([]);
   const [categories, setCategories] = useState<ApiCategory[]>([]);
   const [members, setMembers] = useState<ApiMember[]>([]);
   const [expenses, setExpenses] = useState<ApiExpense[]>([]);
@@ -479,9 +499,10 @@ function ApiExpensesPage() {
           throw new Error('Ledger trả về danh mục không hợp lệ.');
         setGroups(groupValue.filter((group) => group.dissolvedAt === null));
         setFriends(
-          friendValue.map((friendship) =>
-            friendship.userA === userId ? friendship.userB : friendship.userA,
-          ),
+          friendValue.map((friendship) => ({
+            id: friendship.userA === userId ? friendship.userB : friendship.userA,
+            identity: friendship.friend,
+          })),
         );
         setCategories(categoryValue);
         if (categoryValue[0]) setCategoryId(categoryValue[0].id);
@@ -556,6 +577,14 @@ function ApiExpensesPage() {
         ? [userId]
         : [];
   const selectedIds = Object.keys(shares);
+  const candidateProfiles = new Map<string, ApiHumanIdentity>([
+    ...friends.flatMap((friend) =>
+      friend.identity ? [[friend.id, friend.identity] as const] : [],
+    ),
+    ...members.flatMap((member) => (member.user ? [[member.userId, member.user] as const] : [])),
+  ]);
+  const candidateLabel = (candidateId: string): string =>
+    candidateId === userId ? 'Bạn' : humanIdentityLabel(candidateProfiles.get(candidateId));
 
   function openCreate(): void {
     setEditing(null);
@@ -828,8 +857,8 @@ function ApiExpensesPage() {
                 >
                   <option value="">Không gắn bạn</option>
                   {friends.map((friend) => (
-                    <option key={friend} value={friend}>
-                      {friend}
+                    <option key={friend.id} value={friend.id}>
+                      {humanIdentityLabel(friend.identity)}
                     </option>
                   ))}
                 </select>
@@ -840,7 +869,7 @@ function ApiExpensesPage() {
               <select value={payerId} onChange={(event) => setPayerId(event.target.value)}>
                 {candidateIds.map((candidate) => (
                   <option key={candidate} value={candidate}>
-                    {candidate === userId ? 'Bạn' : candidate}
+                    {candidateLabel(candidate)}
                   </option>
                 ))}
               </select>
@@ -869,7 +898,7 @@ function ApiExpensesPage() {
                         checked={shares[candidate] !== undefined}
                         onChange={(event) => toggleParticipant(candidate, event.target.checked)}
                       />
-                      {candidate === userId ? 'Bạn' : candidate}
+                      {candidateLabel(candidate)}
                     </label>
                     {shares[candidate] !== undefined && (
                       <input
@@ -973,15 +1002,31 @@ function isApiGroup(value: unknown): value is ApiGroup {
   );
 }
 
-function isFriendship(value: unknown): value is { userA: string; userB: string } {
-  return isRecord(value) && typeof value.userA === 'string' && typeof value.userB === 'string';
+function isFriendship(value: unknown): value is ApiFriendship {
+  return (
+    isRecord(value) &&
+    typeof value.userA === 'string' &&
+    typeof value.userB === 'string' &&
+    (value.friend === undefined || isApiHumanIdentity(value.friend))
+  );
 }
 
 function isApiMember(value: unknown): value is ApiMember {
   return (
     isRecord(value) &&
     typeof value.userId === 'string' &&
-    (value.role === 'admin' || value.role === 'member')
+    (value.role === 'admin' || value.role === 'member') &&
+    (value.user === undefined || isApiHumanIdentity(value.user))
+  );
+}
+
+function isApiHumanIdentity(value: unknown): value is ApiHumanIdentity {
+  return (
+    isRecord(value) &&
+    (value.id === undefined || typeof value.id === 'string') &&
+    (value.displayName === undefined || typeof value.displayName === 'string') &&
+    (value.email === undefined || typeof value.email === 'string') &&
+    (value.username === undefined || typeof value.username === 'string')
   );
 }
 

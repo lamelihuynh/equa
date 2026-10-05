@@ -12,6 +12,7 @@ import {
   isRecord,
 } from '../api-client';
 import { DemoShell } from '../components/demo-shell';
+import { humanIdentityLabel, humanIdentitySecondaryLabel } from '../identity-label';
 import { formatMinor } from '../money';
 import {
   loadDemoState,
@@ -26,6 +27,9 @@ interface FriendRequestDto {
   requesterId: string;
   targetUserId?: string;
   targetIdentifier: string;
+  targetEmail?: string;
+  requester?: HumanIdentityDto;
+  target?: HumanIdentityDto;
   status: 'pending' | 'accepted' | 'rejected';
 }
 
@@ -33,6 +37,14 @@ interface FriendshipDto {
   userA: string;
   userB: string;
   createdAt: string;
+  friend?: HumanIdentityDto;
+}
+
+interface HumanIdentityDto {
+  id?: string;
+  displayName?: string;
+  email?: string;
+  username?: string;
 }
 
 interface PairBalanceDto {
@@ -309,9 +321,10 @@ function ApiFriendsPage() {
   const pending = requests.filter((request) => request.status === 'pending');
   const incoming = pending.filter((request) => request.targetUserId === userId);
   const outgoing = pending.filter((request) => request.requesterId === userId);
-  const friends = friendships.map((friendship) =>
-    friendship.userA === userId ? friendship.userB : friendship.userA,
-  );
+  const friends = friendships.map((friendship) => ({
+    id: friendship.userA === userId ? friendship.userB : friendship.userA,
+    identity: friendship.friend,
+  }));
 
   return (
     <DemoShell kicker="BẠN BÈ" title="Chia sẻ cùng người quen">
@@ -353,8 +366,13 @@ function ApiFriendsPage() {
               incoming.map((request) => (
                 <article className="demoRow" key={request.id}>
                   <div>
-                    <b>{request.requesterId}</b>
-                    <p>Mã người dùng Equa · {request.targetIdentifier}</p>
+                    <b>{humanIdentityLabel(request.requester)}</b>
+                    <p>
+                      {humanIdentitySecondaryLabel(
+                        request.requester,
+                        humanIdentityLabel(request.requester),
+                      ) ?? 'Lời mời kết bạn trên Equa'}
+                    </p>
                     <span className="statusPill pending">PENDING</span>
                   </div>
                   <div className="rowActions">
@@ -397,7 +415,8 @@ function ApiFriendsPage() {
           </div>
           {outgoing.map((request) => (
             <p className="demoFeedback" role="status" key={request.id}>
-              Đang chờ phản hồi từ {request.targetIdentifier}.
+              Đang chờ phản hồi từ{' '}
+              {humanIdentityLabel(request.target, request.targetEmail ?? request.targetIdentifier)}.
             </p>
           ))}
         </section>
@@ -424,30 +443,38 @@ function ApiFriendsPage() {
           {loading ? (
             <p className="emptyState">Đang tải bạn bè…</p>
           ) : friends.length ? (
-            friends.map((friendId) => (
-              <article className="demoRow" key={friendId}>
-                <div>
-                  <b>{friendId}</b>
-                  <p>Mã người dùng Equa</p>
-                  <p>{formatPairBalance(balances[friendId])}</p>
-                  <span className="statusPill friend">FRIEND</span>
-                </div>
-                <button
-                  className="smallAction"
-                  disabled={busy}
-                  onClick={() => {
-                    if (!window.confirm(`Xóa ${friendId} khỏi danh sách bạn bè?`)) return;
-                    void runAction(
-                      () =>
-                        apiJson(`friends/${encodeURIComponent(friendId)}`, { method: 'DELETE' }),
-                      'Đã xóa bạn khỏi danh sách.',
-                    );
-                  }}
-                >
-                  Xóa bạn
-                </button>
-              </article>
-            ))
+            friends.map((friend) => {
+              const label = humanIdentityLabel(friend.identity);
+              return (
+                <article className="demoRow" key={friend.id}>
+                  <div>
+                    <b>{label}</b>
+                    <p>
+                      {humanIdentitySecondaryLabel(friend.identity, label) ??
+                        formatPairBalance(balances[friend.id])}
+                    </p>
+                    {humanIdentitySecondaryLabel(friend.identity, label) && (
+                      <p>{formatPairBalance(balances[friend.id])}</p>
+                    )}
+                    <span className="statusPill friend">FRIEND</span>
+                  </div>
+                  <button
+                    className="smallAction"
+                    disabled={busy}
+                    onClick={() => {
+                      if (!window.confirm(`Xóa ${label} khỏi danh sách bạn bè?`)) return;
+                      void runAction(
+                        () =>
+                          apiJson(`friends/${encodeURIComponent(friend.id)}`, { method: 'DELETE' }),
+                        'Đã xóa bạn khỏi danh sách.',
+                      );
+                    }}
+                  >
+                    Xóa bạn
+                  </button>
+                </article>
+              );
+            })
           ) : (
             <p className="emptyState">Hãy gửi hoặc chấp nhận lời mời để bắt đầu theo dõi.</p>
           )}
@@ -463,6 +490,9 @@ function isFriendRequest(value: unknown): value is FriendRequestDto {
     typeof value.id === 'string' &&
     typeof value.requesterId === 'string' &&
     typeof value.targetIdentifier === 'string' &&
+    (value.targetEmail === undefined || typeof value.targetEmail === 'string') &&
+    (value.requester === undefined || isHumanIdentity(value.requester)) &&
+    (value.target === undefined || isHumanIdentity(value.target)) &&
     (value.targetUserId === undefined || typeof value.targetUserId === 'string') &&
     (value.status === 'pending' || value.status === 'accepted' || value.status === 'rejected')
   );
@@ -473,7 +503,18 @@ function isFriendship(value: unknown): value is FriendshipDto {
     isRecord(value) &&
     typeof value.userA === 'string' &&
     typeof value.userB === 'string' &&
-    typeof value.createdAt === 'string'
+    typeof value.createdAt === 'string' &&
+    (value.friend === undefined || isHumanIdentity(value.friend))
+  );
+}
+
+function isHumanIdentity(value: unknown): value is HumanIdentityDto {
+  return (
+    isRecord(value) &&
+    (value.id === undefined || typeof value.id === 'string') &&
+    (value.displayName === undefined || typeof value.displayName === 'string') &&
+    (value.email === undefined || typeof value.email === 'string') &&
+    (value.username === undefined || typeof value.username === 'string')
   );
 }
 
