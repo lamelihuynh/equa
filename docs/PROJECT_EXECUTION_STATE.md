@@ -39,7 +39,7 @@ DIRTY. Code, deployment source, and issue template are pushed. Current local-onl
 
 ## Current Phase
 
-Provider recheck 2026-10-08: Render Free services/Postgres are available. Gateway dep-db3g1cgm7kps73ehftm0 remains LIVE at SHA fec7ead. Historical auth 502s occurred while Identity was unavailable; exact provider failure is unproven. The Web fix at c34aa69 uses `/v1/auth/_ready` through Gateway to Identity `/health`, retries only the safe GET for up to about 130 seconds, then sends one auth POST. Non-JSON replies now produce status-aware errors. Vercel deployment dpl_6KmVAA9kc3wGyQFGsVDLtLUTZ1bK is READY and aliased; its public readiness rewrite returned HTTP 200 with Identity health JSON via Kong at 2026-10-08 15:37:27 UTC, warming services. CI run 37801366848 and Security/CodeQL run 37801366362 pass; Render deploy was skipped because backend code is unchanged. Web tests 20/20, lint, typecheck, Prettier, local/Vercel-mode builds, and diff check pass. Cold-start auth, login, and reset E2E remain NOT RUN. Render Free Shell/SSH is unavailable; no paid access used. User reports both accounts VERIFIED.
+Provider recheck 2026-10-08: Render Free services/Postgres are available. Gateway dep-db3g1cgm7kps73ehftm0 remains LIVE at SHA fec7ead. Historical auth 502s occurred while Identity was unavailable; exact provider failure is unproven. The Web fix at c34aa69 uses `/v1/auth/_ready` through Gateway to Identity `/health`, retries only the safe GET for up to about 130 seconds, then sends one auth POST. Non-JSON replies now produce status-aware errors. Vercel deployment dpl_6KmVAA9kc3wGyQFGsVDLtLUTZ1bK is READY and aliased; its public readiness rewrite returned HTTP 200 with Identity health JSON via Kong at 2026-10-08 15:37:27 UTC, warming services. After 15 minutes idle, a cached old browser client skipped readiness and received HTTP 502 on forgot-password; the cache-disabled UI attempt produced no auth request, so the new client cold-start behavior remains unproven. CI run 37801366848 and Security/CodeQL run 37801366362 pass; Render deploy was skipped because backend code is unchanged. Web tests 20/20, lint, typecheck, Prettier, local/Vercel-mode builds, and diff check pass. Login/reset E2E remain NOT RUN. Render Free Shell/SSH is unavailable; no paid access used. User reports both accounts VERIFIED.
 
 ## Current Architecture
 
@@ -153,11 +153,11 @@ Unspecified split/balance/debt/settlement semantics, debt-reminder policy, and p
 
 ## Current Blocker
 
-Current phase: Safe Identity readiness wake and auth HTTP parsing are implemented, validated, committed, and pushed on `staging/demo` at `c34aa6958be6b2f4302c243b7b430fdb20497b63`. CI and Security/CodeQL pass; Render deployment was skipped as no backend code changed. Auth POST mutations are sent once after a successful same-origin Gateway health preflight; only the GET is retried. No Gateway code/config changes. Vercel deployment dpl_6KmVAA9kc3wGyQFGsVDLtLUTZ1bK is READY; public readiness returned Identity HTTP 200 via Kong at 15:37:27 UTC, which warmed the services. Cold-start auth, public login and reset E2E remain pending. Production remains NOT READY.
+Current phase: Safe Identity readiness wake and auth HTTP parsing are implemented, validated, committed, and pushed on `staging/demo` at `c34aa6958be6b2f4302c243b7b430fdb20497b63`. CI and Security/CodeQL pass; Render deployment was skipped as no backend code changed. Auth POST mutations are sent once after a successful same-origin Gateway health preflight; only the GET is retried. No Gateway code/config changes. Vercel deployment dpl_6KmVAA9kc3wGyQFGsVDLtLUTZ1bK is READY; public readiness returned Identity HTTP 200 via Kong at 15:37:27 UTC, which warmed the services. The only post-idle browser POST came from a stale client and returned 502; the current helper's cold-start flow is still unproven. Production remains NOT READY.
 
 ## Exact Next Action
 
-Exact next action: make no Gateway/Identity requests until at least 2026-10-08 15:52:27 UTC. Then use the public Forgot Password UI as the first auth operation, verify the health preflight and HTTP 202, submit for both existing verified accounts, and stop for the user's reset-email clicks.
+Exact next action: exercise the public same-origin auth flow using `/v1/auth/_ready` with the Web's bounded retry schedule; after it returns Identity health JSON, send one forgot-password POST for the first existing verified account. Only if it returns HTTP 202, repeat for the second account, then stop for the user's reset-email clicks.
 
 ## Resume Instructions
 
