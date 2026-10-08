@@ -21,6 +21,9 @@ if (process.env.VERCEL) {
 
 const nextConfig: NextConfig = {
   ...(process.env.VERCEL ? {} : { output: 'standalone' }),
+  ...(process.env.VERCEL && gatewayUrl
+    ? { env: { NEXT_PUBLIC_GATEWAY_HEALTH_URL: `${gatewayUrl}/health` } }
+    : {}),
   ...(process.env.VERCEL
     ? {
         rewrites() {

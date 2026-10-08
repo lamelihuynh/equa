@@ -319,6 +319,8 @@ async function waitForIdentityThroughGateway(): Promise<void> {
 }
 
 function identityReadinessUrl(): string {
+  const directGatewayHealthUrl = process.env.NEXT_PUBLIC_GATEWAY_HEALTH_URL;
+  if (directGatewayHealthUrl) return directGatewayHealthUrl;
   if (apiBaseUrl === '/v1') return `${apiBaseUrl}/auth/_ready`;
   return `${apiBaseUrl.replace(/\/v1\/?$/, '')}/health`;
 }

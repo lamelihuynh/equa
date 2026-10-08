@@ -25,9 +25,42 @@ function stubBrowser(token = 'old-token'): Map<string, string> {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('Equa web API client', () => {
+  it('wakes Render directly using the public Gateway health URL when configured', async () => {
+    const healthUrl = 'https://equa-staging-demo-gateway.onrender.com/health';
+    vi.stubEnv('NEXT_PUBLIC_GATEWAY_HEALTH_URL', healthUrl);
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response('{"status":"ok","service":"identity"}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response('{"accessToken":"fresh-token"}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetcher);
+
+    await expect(
+      authJson('auth/login', { email: 'test@example.com', password: 'password' }),
+    ).resolves.toEqual({
+      accessToken: 'fresh-token',
+    });
+
+    const [healthUrlSent, healthInit] = fetcher.mock.calls[0] ?? [];
+    expect(healthUrlSent).toBe(healthUrl);
+    expect(healthInit?.method).toBe('GET');
+    expect(healthInit?.cache).toBe('no-store');
+    expect(fetcher.mock.calls[1]?.[1]?.method).toBe('POST');
+  });
+
   it('wakes Identity through the Gateway before sending one auth POST', async () => {
     const fetcher = vi
       .fn<typeof fetch>()
