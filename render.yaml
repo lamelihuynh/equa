@@ -48,8 +48,8 @@ projects:
             rootDir: .
             autoDeployTrigger: checksPass
             healthCheckPath: /health
-            buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @equa/identity-service... build
-            startCommand: pnpm --filter @equa/identity-service db:migrate && pnpm --filter @equa/identity-service start
+            buildCommand: corepack pnpm install --frozen-lockfile && corepack pnpm --filter @equa/identity-service... build
+            startCommand: corepack pnpm --filter @equa/identity-service db:migrate && corepack pnpm --filter @equa/identity-service start
             envVars:
               - fromGroup: equa-staging-runtime
               - fromGroup: equa-staging-jwt
@@ -78,13 +78,13 @@ projects:
             rootDir: .
             autoDeployTrigger: checksPass
             healthCheckPath: /health
-            buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @equa/social-service... build
+            buildCommand: corepack pnpm install --frozen-lockfile && corepack pnpm --filter @equa/social-service... build
             startCommand: |
               set -eu
               export IDENTITY_URL="https://${IDENTITY_EXTERNAL_HOSTNAME}"
               export LEDGER_URL="https://${LEDGER_EXTERNAL_HOSTNAME}"
-              pnpm --filter @equa/social-service db:migrate
-              exec pnpm --filter @equa/social-service start
+              corepack pnpm --filter @equa/social-service db:migrate
+              exec corepack pnpm --filter @equa/social-service start
             envVars:
               - fromGroup: equa-staging-runtime
               - fromGroup: equa-staging-jwt
@@ -117,12 +117,12 @@ projects:
             rootDir: .
             autoDeployTrigger: checksPass
             healthCheckPath: /health
-            buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @equa/ledger-service... build
+            buildCommand: corepack pnpm install --frozen-lockfile && corepack pnpm --filter @equa/ledger-service... build
             startCommand: |
               set -eu
               export SOCIAL_URL="https://${SOCIAL_EXTERNAL_HOSTNAME}"
-              pnpm --filter @equa/ledger-service migrate
-              exec pnpm --filter @equa/ledger-service start
+              corepack pnpm --filter @equa/ledger-service migrate
+              exec corepack pnpm --filter @equa/ledger-service start
             envVars:
               - fromGroup: equa-staging-runtime
               - fromGroup: equa-staging-jwt
@@ -149,12 +149,12 @@ projects:
             rootDir: .
             autoDeployTrigger: checksPass
             healthCheckPath: /health
-            buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @equa/automation-sync-service... build
+            buildCommand: corepack pnpm install --frozen-lockfile && corepack pnpm --filter @equa/automation-sync-service... build
             startCommand: |
               set -eu
               export LEDGER_URL="https://${LEDGER_EXTERNAL_HOSTNAME}"
-              pnpm --filter @equa/automation-sync-service db:migrate
-              exec pnpm --filter @equa/automation-sync-service start
+              corepack pnpm --filter @equa/automation-sync-service db:migrate
+              exec corepack pnpm --filter @equa/automation-sync-service start
             envVars:
               - fromGroup: equa-staging-runtime
               - fromGroup: equa-staging-jwt

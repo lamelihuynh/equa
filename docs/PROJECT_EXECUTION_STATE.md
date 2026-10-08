@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-10-05 (Asia/Saigon)
+2026-10-08 (Asia/Saigon)
 
 ## Current Goal
 
@@ -14,17 +14,16 @@ Deliver a public STAGING / CLASS TEST release: complete the supported Web and Mo
 
 ## Current HEAD
 
-- Local: `7151993624ee5712307c284b4e4509ba461686b9`
-- `origin/staging/demo`: `7151993624ee5712307c284b4e4509ba461686b9` (matches local)
+- Local: `dcfb44c0b2a22846e0809328e6b9950ed25269ad`
+- `origin/staging/demo`: `dcfb44c0b2a22846e0809328e6b9950ed25269ad` (matches local)
 - `feature/automation-sync`: `0043ee64680a346eb816db05bb9ad52f1d46521c`
 - `develop`: `4ff198e092562cbeb46b2882f5629a9badb4e3fd`
 
 ## Working Tree
 
-DIRTY. The code and deployment source are pushed. Current local-only work is the updated checkpoint and class-test artifacts:
+DIRTY. Code, deployment source, and issue template are pushed. Current local-only task changes are the reconciled checkpoints and validation-matrix evidence:
 
-- Modified checkpoints: `docs/PROJECT_EXECUTION_STATE.md`, `docs/STAGING_DEPLOY_STATE.md`
-- New artifacts: `docs/CLASS_TEST_VALIDATION.md`, `.github/ISSUE_TEMPLATE/class-test-bug.yml`
+- Modified task docs: `docs/PROJECT_EXECUTION_STATE.md`, `docs/STAGING_DEPLOY_STATE.md`, `docs/CLASS_TEST_VALIDATION.md`
 - Preserve pre-existing/generated: `apps/web/next-env.d.ts`, `apps/web/tsconfig.tsbuildinfo`, `apps/web/AGENTS.md`, `apps/web/CLAUDE.md`, `reports/`
   Do not stage or remove the pre-existing generated/report/AGENTS/CLAUDE files.
 
@@ -34,13 +33,13 @@ DIRTY. The code and deployment source are pushed. Current local-only work is the
 - `staging/demo` carries the latest staging candidate. Its 11 commits after `feature/automation-sync` include Web identity/invitation UX, Kong/Render preparation, and deployment documentation.
 - Earlier local evidence is recorded in `docs/INTEGRATION_TESTING.md` and below; it is not public-staging or native-Mobile evidence.
 - Phase 5 local Mobile work now adds overview, friends, groups/invitations, expenses CRUD, readable labels, explicit API configuration and version-checked offline delete while preserving the existing SecureStore and SQLite/outbox flow.
-- Pushed commits: `3a30f27` Mobile flows; `c4b21de` Automation database ownership; `7151993` Free class-test topology/docs.
-- GitHub CI and Security passed on SHA `7151993`; Deploy staging skipped this branch. The old Vercel integration failure is out of scope.
+- Pushed commits: `3a30f27` Mobile flows; `c4b21de` Automation database ownership; `7151993` Free class-test topology; `dcfb44c` class validation matrix and issue form.
+- GitHub CI run `37338178757` and Security run `37338178538` passed on SHA `dcfb44c`; Deploy staging run `37338178878` was skipped for this branch. The old Vercel integration failure is out of scope.
 - Added a truthful `docs/CLASS_TEST_VALIDATION.md` matrix and public GitHub class-test bug form; public URLs/acceptance remain unavailable, so `docs/CLASS_TEST.md` is deferred.
 
 ## Current Phase
 
-Phase 4 audit and local Phase 5 Mobile implementation are complete. The expanded Phase 9 candidate includes Automation & Sync, its owned database target, and Kong sync routes. Three validated commits are pushed at `7151993`; GitHub CI and Security pass, and Deploy staging skipped the branch. A validation matrix and issue form are prepared locally. The old Vercel status under inaccessible `equa1` failed and is explicitly not required. Resend blocks public registration; Expo account authorization blocks EAS profile/build. No cloud resource has been provisioned.
+Render Identity service `srv-db26vk6k1f9s739bmskg` is Free. Its first build failed because `corepack enable` tried to unlink `/usr/bin/pnpm` on a read-only filesystem; startup was not reached. `render.yaml` now uses direct `corepack pnpm` for all four Node services' install/build/start/migration commands; root pins `pnpm@11.21.0`. Local Corepack version, frozen install, Identity build, and Blueprint validation pass. No Resend secrets, database credentials, or business logic changed. All four database migrations pass; Postgres IP allow list is empty. Exact next action: commit/push only `render.yaml` and related checkpoint docs, then inspect Render auto-deploy; trigger Identity redeploy if none started, inspect build/runtime logs, and verify `/health`.
 
 ## Current Architecture
 
@@ -48,14 +47,14 @@ Web and Mobile call the Kong Gateway. Identity owns accounts/profiles, Social ow
 
 ## Current Feature Status
 
-| Area                 | Status  | Evidence / remaining work                                                                                                                                                                                         |
-| -------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Web MVP              | PARTIAL | Local API-mode flows and human-readable identity/in-app invitations have prior local evidence. Public URL, class registration/verification, and public E2E are NOT RUN.                                           |
-| Mobile MVP           | PARTIAL | Local screens/adapters cover auth/profile, friends, groups/invitations, expense CRUD, overview, readable labels, and SQLite/outbox create/edit/delete. Public Gateway URL, EAS APK, and native validation remain. |
-| Backend              | PARTIAL | Core local PostgreSQL/RabbitMQ cross-service flows have historical evidence. Public deployment, migrations, and health/security smoke are NOT RUN.                                                                |
-| Email                | BLOCKED | Local Mailpit is configured. Public registration needs a verified sender and Resend API key; no key is configured in the local environment.                                                                       |
-| Android distribution | NOT RUN | No APK/EAS distribution URL. Check EAS authorization and local Android tooling after resuming.                                                                                                                    |
-| Public staging       | NOT RUN | No Render Equa resources, staging databases, public URLs, or Vercel Equa project.                                                                                                                                 |
+| Area                 | Status  | Evidence / remaining work                                                                                                                                                                                                   |
+| -------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web MVP              | PARTIAL | Local API-mode flows and human-readable identity/in-app invitations have prior local evidence. Public URL, class registration/verification, and public E2E are NOT RUN.                                                     |
+| Mobile MVP           | PARTIAL | Local screens/adapters cover auth/profile, friends, groups/invitations, expense CRUD, overview, readable labels, and SQLite/outbox create/edit/delete. Public Gateway URL, EAS APK, and native validation remain.           |
+| Backend              | PARTIAL | Free Postgres role check and four migrations PASS; Identity Free service's first BUILD failed at global Corepack enable. Direct-Corepack fix passes locally; redeploy/health remain NOT RUN. Other services remain NOT RUN. |
+| Email                | BLOCKED | Identity service exists; user must enter `RESEND_API_KEY` and `EMAIL_FROM` directly in Render Dashboard before registration/email verification.                                                                             |
+| Android distribution | NOT RUN | No APK/EAS distribution URL. EAS account authentication is confirmed; build and native validation remain unrun.                                                                                                             |
+| Public staging       | NOT RUN | Four Render migrations pass and Identity Free service exists, but no verified public service URL, Web deployment, registration, or acceptance flow exists. Vercel project remains empty.                                    |
 
 ## Mobile Audit Matrix
 
@@ -78,29 +77,30 @@ Local API mode uses the Gateway and Local Demo is an explicit separate option. H
 
 ## Mobile Status
 
-Mobile now has five-tab navigation for overview, friends, groups, expenses, and profile. Friend requests, group create/edit/invite/accept/decline/admin controls, online expense CRUD, VND/minor-unit entry, and supported friend balances use authenticated Gateway adapters. The existing SQLite cache/outbox and conflict UI remain; offline soft delete uses the server's version-checked sync delete. The latest run passed 53/53 tests, typecheck/build, and lint. No `adb` or global `eas` command is present; EAS CLI config requires Expo account authorization. Native validation is NOT RUN.
+Mobile now has five-tab navigation for overview, friends, groups, expenses, and profile. Friend requests, group create/edit/invite/accept/decline/admin controls, online expense CRUD, VND/minor-unit entry, and supported friend balances use authenticated Gateway adapters. The existing SQLite cache/outbox and conflict UI remain; offline soft delete uses the server's version-checked sync delete. The latest run passed 53/53 tests, typecheck/build, and lint. Expo EAS account authentication now passes; no Android runtime (`adb`) is present, and native validation is NOT RUN.
 
 ## Backend Status
 
-Identity, Social, Ledger, Automation & Sync, and Notification code exists with service ownership boundaries. Local PostgreSQL/RabbitMQ scenarios are documented as previously passed. No remote migrations or public backend deployments have run.
+Identity, Social, Ledger, Automation & Sync, and Notification code exists with service ownership boundaries. Render Identity/Social/Ledger/Automation migrations pass against separate databases. The Free Identity service exists; public backend deployments/health and RabbitMQ remain unverified.
 
 ## Deployment Status
 
-Pre-provisioning. New Vercel project in the authenticated Hobby scope and new Render Free resources are authorized for staging only, subject to $0 plans. No custom domains, old `equa1` project, or existing DNS records are to be reused or modified. Resend setup and Expo/EAS account authorization are human gates.
+Free Postgres provisioned and available; four service-owned migrations pass. `equa-staging-demo-identity` (`srv-db26vk6k1f9s739bmskg`) exists on `plan: free`; first deployment/health is not yet verified and no URL was returned at creation. User verified Hobby $0/month/no-card and authorized only Free resources. Vercel project remains undeployed. No custom domains, old `equa1` project, or existing DNS records are to be reused or modified.
 
 ## Cloud Resources
 
-| Provider                                  | Resource                       | URL                                 | Plan        | State                                                  |
-| ----------------------------------------- | ------------------------------ | ----------------------------------- | ----------- | ------------------------------------------------------ |
-| Render                                    | Equa project/services/Postgres | —                                   | —           | None found in authenticated `equa` workspace           |
-| Vercel                                    | Equa Web project               | —                                   | Hobby scope | None found in authenticated `ti-ky-s-projects` account |
-| Vercel                                    | Existing unrelated project     | `vibefeed1-hcmutcuatiky.vercel.app` | Hobby       | Leave untouched                                        |
+| Provider                                  | Resource                     | URL                                                         | Plan  | State                                                            |
+| ----------------------------------------- | ---------------------------- | ----------------------------------------------------------- | ----- | ---------------------------------------------------------------- |
+| Render                                    | `equa-staging-demo-postgres` | `https://dashboard.render.com/d/dpg-db24cj17lnhs73dib9l0-a` | Free  | `dpg-db24cj17lnhs73dib9l0-a`; available; expires 2026-11-05      |
+| Render                                    | `equa-staging-demo-identity` | —                                                           | Free  | `srv-db26vk6k1f9s739bmskg`; created; first deploy/health pending |
+| Vercel                                    | `equa-staging-demo-web`      | —                                                           | Hobby | Empty project `prj_itv1H6yyMa0B4RSZIxgxhsJKH8UG`; no deployment  |
+| Vercel                                    | Existing unrelated project   | `vibefeed1-hcmutcuatiky.vercel.app`                         | Hobby | Leave untouched                                                  |
 | No external database or migration exists. |
 
 ## Database State
 
 - Local Compose PostgreSQL is the existing local environment; prior service-owned migrations and cross-service scenarios are recorded in `docs/INTEGRATION_TESTING.md`.
-- No Render Postgres instance, staging logical database, or staging migration exists.
+- Render Postgres `equa-staging-demo-postgres` exists on Free; default login is `newcredential`, effective role query reports `rolcreatedb=true`, `rolsuper=false`. Identity, Social, Ledger, and Automation migrations PASS on their owned databases. The initial credential exposure was rotated; allow list is empty.
 - Any future staging deployment must use separate logical databases only for deployed services; never share tables or add cross-service foreign keys.
 
 ## Public URLs
@@ -120,14 +120,14 @@ Historical evidence (not re-run for this reconciliation):
 - Earlier workspace tests: 161 tests across 9 packages; lint, typecheck and build passed.
 - Local service migrations and PostgreSQL/RabbitMQ vertical scenarios passed as recorded in `docs/INTEGRATION_TESTING.md`.
 - Staging-preparation checks for Web, Social, Identity, Ledger, Contracts, Kong and Render Blueprint passed as recorded in `docs/STAGING_DEPLOY_STATE.md`.
-- Current Mobile checks: 53/53 tests; typecheck, lint, build, Expo app config, and EAS JSON syntax pass. EAS project-bound config/build and public Gateway variable are NOT RUN.
-- Current Automation checks: 42/42 tests including database ownership URL parsing; typecheck, lint, and build pass. Render Blueprint validation passes with 15 planned actions; Kong staging Docker build and substituted config parse pass. No resources were provisioned.
-- GitHub CI and Security PASS for `7151993`; the Vercel check fails under the inaccessible, out-of-scope `equa1` project.
+- Current Mobile checks: 53/53 tests; typecheck, lint, build, Expo app config, and EAS JSON syntax pass. EAS authentication PASS on 2026-10-06; project-bound config/build and public Gateway variable are NOT RUN.
+- Current Automation checks: 42/42 tests including database ownership URL parsing; typecheck, lint, and build pass. Render Blueprint validation passes with 19 planned actions; Kong staging Docker build and substituted config parse pass. One Free Render Postgres is provisioned; all four migrations pass; Identity Free service exists, first deploy/health not verified.
+- GitHub CI run `37338178757` and Security run `37338178538` PASS for `dcfb44c`; Deploy staging run `37338178878` is SKIPPED. The Vercel check fails under the inaccessible, out-of-scope `equa1` project.
 
 ## Tests Not Run
 
 - Public Web registration/verification and two-account acceptance.
-- Render staging migrations, public health/security smoke, and public Web/API E2E.
+- Public health/security smoke and public Web/API E2E.
 - EAS account-bound build, Android device/emulator, public Mobile Gateway flows, offline/reconnect on device.
 - Class test report submission and public validation matrix execution.
 
@@ -137,22 +137,24 @@ No newly verified bug from the state reconciliation. The current state does not 
 
 ## Known Product Gaps
 
-Unspecified split/balance/debt/settlement semantics, debt-reminder policy, and post-dissolution expense history remain BLOCKED. Do not invent these rules. Automation now targets its own logical database in code; whether the future Render Postgres owner can create `equa_automation_sync` remains NOT RUN until that staging database exists. Notification/RabbitMQ remain omitted while in-app invitation delivery is the promised flow.
+Unspecified split/balance/debt/settlement semantics, debt-reminder policy, and post-dissolution expense history remain BLOCKED. Do not invent these rules. Automation targets its own logical database; Render effective role `rolcreatedb=true` was verified and all four service-owned migrations passed. Notification/RabbitMQ remain omitted while in-app invitation delivery is the promised flow.
 
 ## Human Decisions / Authorizations
 
-- Authorized: staging/class testing only; create NEW resources; prefer USD 0; no production, no paid resource, no custom domain.
+- Authorized: staging/class testing only; create NEW resources; Free-only/ USD 0; no production, no paid resource, no custom domain. Stop before any action that can incur a charge.
 - Authorized: use current authenticated Vercel scope; ignore and do not modify inaccessible `equa1/equa-web-staging`; use direct-source Vercel deployment if Git import blocks.
 - Latest class-test requirement supersedes the earlier seed-only lecturer demo: self-service registration and email verification must work; pre-seeded accounts alone are insufficient.
+- Resend sender is verified and API key is ready; after Identity exists, the user will enter it directly into Render secrets. Never request or paste the key in chat.
+- Expo/EAS account authentication confirmed on 2026-10-06.
 - Do not paste provider secrets into chat or commit them.
 
 ## Current Blocker
 
-Two external gates remain: public registration requires a verified Resend sender and API key, and EAS project configuration/build requires Expo account login. The repository `.env` has `EMAIL_PROVIDER=mailpit` and no `RESEND_API_KEY`; no Render service exists yet to hold the staging secret. EAS CLI reported that an Expo user account is required. Do not paste credentials into chat.
+Current phase: credential rotation is verified; effective database role has `rolsuper=false`, `rolcreatedb=true`. Identity, Social, Ledger, and Automation migrations PASS on Render (`equa_identity`, `equa_social`, `equa_ledger`, `equa_automation_sync`) with TLS. Identity Free service `srv-db26vk6k1f9s739bmskg` first failed BUILD at global `corepack enable`; direct `corepack pnpm` fix passes locally, awaiting commit/redeploy. `RESEND_API_KEY` and `EMAIL_FROM` are unchanged; temporary Postgres allow-list is empty.
 
 ## Exact Next Action
 
-Commit and push the class-test matrix/issue form after their final check. Then wait for Resend sender/API-key authorization and Expo account login. Do not modify the inaccessible old Vercel project. After the provider gates, confirm Render Postgres `CREATEDB` during the owned Automation migration and provision only Free resources.
+Exact next action: commit/push the validated deployment-only fix (`render.yaml` plus checkpoint docs) on `staging/demo`; inspect Render auto-deploy and trigger a redeploy if none started. Inspect build/runtime logs and verify `/health`. After the service runs, continue at the existing Resend secret-entry gate; never ask for either value in chat.
 
 ## Resume Instructions
 
