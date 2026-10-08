@@ -14,8 +14,8 @@ Deliver a public STAGING / CLASS TEST release: complete the supported Web and Mo
 
 ## Current HEAD
 
-- Local: `dcfb44c0b2a22846e0809328e6b9950ed25269ad`
-- `origin/staging/demo`: `dcfb44c0b2a22846e0809328e6b9950ed25269ad` (matches local)
+- Local: `fec7ead080785302630bfb86ae7682db2480357c`
+- `origin/staging/demo`: `fec7ead080785302630bfb86ae7682db2480357c` (matches local)
 - `feature/automation-sync`: `0043ee64680a346eb816db05bb9ad52f1d46521c`
 - `develop`: `4ff198e092562cbeb46b2882f5629a9badb4e3fd`
 
@@ -39,7 +39,7 @@ DIRTY. Code, deployment source, and issue template are pushed. Current local-onl
 
 ## Current Phase
 
-Render Identity service `srv-db26vk6k1f9s739bmskg` is Free. Its first build failed because `corepack enable` tried to unlink `/usr/bin/pnpm` on a read-only filesystem; startup was not reached. `render.yaml` now uses direct `corepack pnpm` for all four Node services' install/build/start/migration commands; root pins `pnpm@11.21.0`. Local Corepack version, frozen install, Identity build, and Blueprint validation pass. No Resend secrets, database credentials, or business logic changed. All four database migrations pass; Postgres IP allow list is empty. Exact next action: commit/push only `render.yaml` and related checkpoint docs, then inspect Render auto-deploy; trigger Identity redeploy if none started, inspect build/runtime logs, and verify `/health`.
+Provider recheck 2026-10-08: Render Free services/Postgres are available. Gateway dep-db3g1cgm7kps73ehftm0 remains LIVE at SHA fec7ead. Historical auth 502s occurred while Identity was unavailable; exact provider failure is unproven. The local Web fix uses `/v1/auth/_ready` through Gateway to Identity `/health`, retries only the safe GET for up to about 130 seconds, then sends one auth POST. Non-JSON replies now produce status-aware errors. Vercel-mode routes manifest confirms readiness rewrite -> Gateway `/health`. Web tests 20/20, lint, typecheck, Prettier, local/Vercel-mode builds, and diff check pass. Fix is not yet deployed; live Web remains dpl_4w2scTPX2oQSBcmamS3xXqysUHSq. Render Free Shell/SSH is unavailable; no paid access used. User reports both accounts VERIFIED; login/reset E2E pending.
 
 ## Current Architecture
 
@@ -47,29 +47,29 @@ Web and Mobile call the Kong Gateway. Identity owns accounts/profiles, Social ow
 
 ## Current Feature Status
 
-| Area                 | Status  | Evidence / remaining work                                                                                                                                                                                                   |
-| -------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Web MVP              | PARTIAL | Local API-mode flows and human-readable identity/in-app invitations have prior local evidence. Public URL, class registration/verification, and public E2E are NOT RUN.                                                     |
-| Mobile MVP           | PARTIAL | Local screens/adapters cover auth/profile, friends, groups/invitations, expense CRUD, overview, readable labels, and SQLite/outbox create/edit/delete. Public Gateway URL, EAS APK, and native validation remain.           |
-| Backend              | PARTIAL | Free Postgres role check and four migrations PASS; Identity Free service's first BUILD failed at global Corepack enable. Direct-Corepack fix passes locally; redeploy/health remain NOT RUN. Other services remain NOT RUN. |
-| Email                | BLOCKED | Identity service exists; user must enter `RESEND_API_KEY` and `EMAIL_FROM` directly in Render Dashboard before registration/email verification.                                                                             |
-| Android distribution | NOT RUN | No APK/EAS distribution URL. EAS account authentication is confirmed; build and native validation remain unrun.                                                                                                             |
-| Public staging       | NOT RUN | Four Render migrations pass and Identity Free service exists, but no verified public service URL, Web deployment, registration, or acceptance flow exists. Vercel project remains empty.                                    |
+| Area                 | Status  | Evidence / remaining work                                                                                                                                                                                                                                                   |
+| -------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web MVP              | PARTIAL | Latest Vercel deployment is ready; synthetic browser/API verification shows the actual HTTP 400 AUTH_TOKEN_EXPIRED instead of a generic message, with bounded startup retries. Real account activation/login remains NOT RUN because recipient inbox access is unavailable. |
+| Mobile MVP           | PARTIAL | Local screens/adapters and tests cover supported flows. EAS project/config/preview env pass and APK is available; native validation and public Mobile flows remain.                                                                                                         |
+| Backend              | PARTIAL | Service-owned migrations PASS; all five Render `/health` endpoints return 200 after wakeup; Gateway/Vercel API guards return expected 401 and CORS preflight returns 200.                                                                                                   |
+| Email                | PARTIAL | Two resend requests returned HTTP 202 accepted; fresh message receipt, token state, verification, and login are not confirmed. One captured browser request returned HTTP 502 while the Gateway/Identity upstream was starting.                                             |
+| Android distribution | PARTIAL | EAS preview APK build c946bf3b-09a7-4cb5-959d-06a37ef078e1 FINISHED; artifact URL is available. Device validation NOT RUN because adb is unavailable.                                                                                                                       |
+| Public staging       | PARTIAL | Web/Gateway smoke and EAS APK pass; native test, email activation, public two-user E2E, and class acceptance remain pending.                                                                                                                                                |
 
 ## Mobile Audit Matrix
 
-| Feature              | Backend available?                           | Web available?   | Mobile implemented?                                                                    | Mobile tested?                                 | Gap                                                                      |
-| -------------------- | -------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------ |
-| Auth/session         | Yes: Identity login/register/refresh/profile | Yes              | Login, signup, forgot-password, SecureStore session, server logout                     | Unit tests PASS; native NOT RUN                | Email verification is through the Web link; public provider gate remains |
-| Profile              | Yes: Identity profile/avatar routes          | Yes              | Profile edit and avatar upload action                                                  | Typecheck/lint PASS; native NOT RUN            | Staging avatar storage is disabled; present provider errors clearly      |
-| Friends/requests     | Yes: Social routes                           | Yes              | List, send, accept/reject, remove, on-demand supported balance                         | API tests PASS; native NOT RUN                 | Public two-account flow NOT RUN                                          |
-| Groups/invitations   | Yes: Social routes                           | Yes              | List/detail/create/edit, member roles, email invite, accept/decline, remove/dissolve   | API tests PASS; native NOT RUN                 | Public two-account flow NOT RUN                                          |
-| Expenses             | Yes: Ledger routes                           | Yes              | Online create/edit/soft-delete; explicit participants and payer; VND/minor-unit UI     | API/money tests PASS; native NOT RUN           | Public two-account flow NOT RUN                                          |
-| Dashboard/home       | Yes: group/expense totals                    | Yes              | Active group/expense counts, currency-separated totals and recent expenses             | Typecheck/lint PASS; native NOT RUN            | Public Gateway query NOT RUN                                             |
-| Offline cache/queue  | Yes: Automation sync/feed                    | N/A              | SQLite group/expense cache; durable create/edit/delete outbox; reconnect replay        | SQLite/sync tests PASS; native NOT RUN         | No offline friend/invitation mutation; native restart/reconnect NOT RUN  |
-| Conflict/retry       | Yes: Automation sync                         | N/A              | Automatic retry and explicit server-version conflict resolution                        | Unit tests PASS; native NOT RUN                | Native conflict UX NOT RUN                                               |
-| Public API config    | Gateway routes exist                         | Web uses Gateway | Local emulator-safe default; non-development requires HTTPS `EXPO_PUBLIC_API_BASE_URL` | Unit tests PASS                                | Set the public URL in EAS `preview` after Gateway creation               |
-| Android distribution | N/A                                          | N/A              | `eas.json` internal APK preview profile                                                | JSON syntax PASS; account-bound config NOT RUN | Expo account authorization and APK build remain                          |
+| Feature              | Backend available?                           | Web available?   | Mobile implemented?                                                                    | Mobile tested?                         | Gap                                                                      |
+| -------------------- | -------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------ |
+| Auth/session         | Yes: Identity login/register/refresh/profile | Yes              | Login, signup, forgot-password, SecureStore session, server logout                     | Unit tests PASS; native NOT RUN        | Email verification is through the Web link; public provider gate remains |
+| Profile              | Yes: Identity profile/avatar routes          | Yes              | Profile edit and avatar upload action                                                  | Typecheck/lint PASS; native NOT RUN    | Staging avatar storage is disabled; present provider errors clearly      |
+| Friends/requests     | Yes: Social routes                           | Yes              | List, send, accept/reject, remove, on-demand supported balance                         | API tests PASS; native NOT RUN         | Public two-account flow NOT RUN                                          |
+| Groups/invitations   | Yes: Social routes                           | Yes              | List/detail/create/edit, member roles, email invite, accept/decline, remove/dissolve   | API tests PASS; native NOT RUN         | Public two-account flow NOT RUN                                          |
+| Expenses             | Yes: Ledger routes                           | Yes              | Online create/edit/soft-delete; explicit participants and payer; VND/minor-unit UI     | API/money tests PASS; native NOT RUN   | Public two-account flow NOT RUN                                          |
+| Dashboard/home       | Yes: group/expense totals                    | Yes              | Active group/expense counts, currency-separated totals and recent expenses             | Typecheck/lint PASS; native NOT RUN    | Public Gateway query NOT RUN                                             |
+| Offline cache/queue  | Yes: Automation sync/feed                    | N/A              | SQLite group/expense cache; durable create/edit/delete outbox; reconnect replay        | SQLite/sync tests PASS; native NOT RUN | No offline friend/invitation mutation; native restart/reconnect NOT RUN  |
+| Conflict/retry       | Yes: Automation sync                         | N/A              | Automatic retry and explicit server-version conflict resolution                        | Unit tests PASS; native NOT RUN        | Native conflict UX NOT RUN                                               |
+| Public API config    | Gateway routes exist                         | Web uses Gateway | Local emulator-safe default; non-development requires HTTPS `EXPO_PUBLIC_API_BASE_URL` | Unit tests PASS                        | Native APK validation remains                                            |
+| Android distribution | N/A                                          | N/A              | `eas.json` internal APK preview profile                                                | EAS APK build PASS                     | Device validation NOT RUN because `adb` is unavailable                   |
 
 ## Web Status
 
@@ -77,25 +77,28 @@ Local API mode uses the Gateway and Local Demo is an explicit separate option. H
 
 ## Mobile Status
 
-Mobile now has five-tab navigation for overview, friends, groups, expenses, and profile. Friend requests, group create/edit/invite/accept/decline/admin controls, online expense CRUD, VND/minor-unit entry, and supported friend balances use authenticated Gateway adapters. The existing SQLite cache/outbox and conflict UI remain; offline soft delete uses the server's version-checked sync delete. The latest run passed 53/53 tests, typecheck/build, and lint. Expo EAS account authentication now passes; no Android runtime (`adb`) is present, and native validation is NOT RUN.
+Mobile now has five-tab navigation for overview, friends, groups, expenses, and profile. Friend requests, group create/edit/invite/accept/decline/admin controls, online expense CRUD, VND/minor-unit entry, and supported friend balances use authenticated Gateway adapters. The existing SQLite cache/outbox and conflict UI remain; offline soft delete uses the server's version-checked sync delete. Latest checks pass: 53/53 tests, typecheck, lint, and local Android export. EAS account auth/project link/config and public preview Gateway variable pass; the preview APK is available. No Android runtime (`adb`) is present, so native validation is NOT RUN.
 
 ## Backend Status
 
-Identity, Social, Ledger, Automation & Sync, and Notification code exists with service ownership boundaries. Render Identity/Social/Ledger/Automation migrations pass against separate databases. The Free Identity service exists; public backend deployments/health and RabbitMQ remain unverified.
+Identity, Social, Ledger, Automation & Sync, and Notification code exists with service ownership boundaries. Render Identity/Social/Ledger/Automation migrations pass against separate databases. Render inventory lists all five services as Free/not suspended; all five health endpoints now return 200 after wakeup. Gateway and Vercel API GET auth guards return expected 401s and preflight returns 200. RabbitMQ is intentionally omitted from the $0 topology.
 
 ## Deployment Status
 
-Free Postgres provisioned and available; four service-owned migrations pass. `equa-staging-demo-identity` (`srv-db26vk6k1f9s739bmskg`) exists on `plan: free`; first deployment/health is not yet verified and no URL was returned at creation. User verified Hobby $0/month/no-card and authorized only Free resources. Vercel project remains undeployed. No custom domains, old `equa1` project, or existing DNS records are to be reused or modified.
+Free Postgres provisioned; four service-owned migrations pass. Render inventory lists all five services as `plan: free`, not suspended, in Singapore; all five direct health checks returned 200 after wakeup. Gateway/Vercel GET routes return expected 401 auth guards, and CORS preflight returns 200. Vercel project `equa-staging-demo-web` is READY and public root returned HTTP 200. The user verified Hobby $0/month/no-card and authorized only Free resources. No custom domains, old `equa1` project, or existing DNS records are to be reused or modified.
 
 ## Cloud Resources
 
-| Provider                                  | Resource                     | URL                                                         | Plan  | State                                                            |
-| ----------------------------------------- | ---------------------------- | ----------------------------------------------------------- | ----- | ---------------------------------------------------------------- |
-| Render                                    | `equa-staging-demo-postgres` | `https://dashboard.render.com/d/dpg-db24cj17lnhs73dib9l0-a` | Free  | `dpg-db24cj17lnhs73dib9l0-a`; available; expires 2026-11-05      |
-| Render                                    | `equa-staging-demo-identity` | —                                                           | Free  | `srv-db26vk6k1f9s739bmskg`; created; first deploy/health pending |
-| Vercel                                    | `equa-staging-demo-web`      | —                                                           | Hobby | Empty project `prj_itv1H6yyMa0B4RSZIxgxhsJKH8UG`; no deployment  |
-| Vercel                                    | Existing unrelated project   | `vibefeed1-hcmutcuatiky.vercel.app`                         | Hobby | Leave untouched                                                  |
-| No external database or migration exists. |
+| Provider | Resource                     | URL                                                         | Plan  | State                                                                                                                                                                           |
+| -------- | ---------------------------- | ----------------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Render   | `equa-staging-demo-postgres` | `https://dashboard.render.com/d/dpg-db24cj17lnhs73dib9l0-a` | Free  | `dpg-db24cj17lnhs73dib9l0-a`; available; expires 2026-11-05                                                                                                                     |
+| Render   | Identity                     | https://equa-staging-demo-identity.onrender.com             | Free  | srv-db26vk6k1f9s739bmskg; APP_WEB_URL set; deploy live; `/health` returned 200 after wakeup                                                                                     |
+| Render   | Social                       | https://equa-staging-demo-social.onrender.com               | Free  | srv-db3f7al9fdbs73dhevog; direct `/health` returned 200 after ~53s wakeup                                                                                                       |
+| Render   | Ledger                       | https://equa-staging-demo-ledger.onrender.com               | Free  | srv-db3fb26i0phs739ui1h0; direct `/health` returned 200 after ~53s wakeup                                                                                                       |
+| Render   | Automation                   | https://equa-staging-demo-automation.onrender.com           | Free  | srv-db3fdkdg1s2s73a7qe20; direct `/health` returned 200 on retry                                                                                                                |
+| Render   | Gateway                      | https://equa-staging-demo-gateway.onrender.com              | Free  | srv-db3g1c0m7kps73ehfrc0; deploy live; `/health` returned 200 after wakeup                                                                                                      |
+| Vercel   | equa-staging-demo-web        | https://equa-staging-demo-web.vercel.app                    | Hobby | prj_itv1H6yyMa0B4RSZIxgxhsJKH8UG; READY deployment dpl_4w2scTPX2oQSBcmamS3xXqysUHSq; source=CLI, base Git SHA fec7ead plus uncommitted Web/Turbo overlay; stable alias assigned |
+| Vercel   | Existing unrelated project   | `vibefeed1-hcmutcuatiky.vercel.app`                         | Hobby | Leave untouched                                                                                                                                                                 |
 
 ## Database State
 
@@ -105,13 +108,13 @@ Free Postgres provisioned and available; four service-owned migrations pass. `eq
 
 ## Public URLs
 
-Frontend: none.
-Gateway: none.
+Frontend: https://equa-staging-demo-web.vercel.app (READY; public root/rewrite smoke checks pass).
+Gateway: https://equa-staging-demo-gateway.onrender.com (deploy live; `/health` and CORS preflight HTTP 200; `/v1/friends`, `/v1/expenses`, `/v1/sync/feed` return expected 401 without a bearer token).
 Existing third-party DNS names are out of scope; do not change them.
 
 ## Mobile Distribution
 
-An internal preview APK profile exists in `apps/mobile/eas.json`; configure `EXPO_PUBLIC_API_BASE_URL` in EAS `preview` after Gateway creation. EAS config inspection requires Expo account login. Expo Free has a limited low-priority build quota; no overage is charged on Free. No APK/install URL exists; device validation is NOT RUN.
+An internal preview APK profile exists in `apps/mobile/eas.json`; EAS project `@tikyisme/equa` and public `preview` Gateway variable are configured. Mobile `postinstall` builds `@equa/contracts` before Metro. Local Android Expo export, 53 tests, typecheck, and lint PASS. EAS build `c946bf3b-09a7-4cb5-959d-06a37ef078e1` FINISHED. APK `https://expo.dev/artifacts/eas/UZOSEWChdoOUB1iaRiNlR3sXsdgxiq_o5M20s875uM4.apk` returns HTTP 200 and is 76,241,972 bytes; it expires 2026-10-22. Device validation is NOT RUN because `adb` is unavailable.
 
 ## Tests Passed
 
@@ -120,15 +123,15 @@ Historical evidence (not re-run for this reconciliation):
 - Earlier workspace tests: 161 tests across 9 packages; lint, typecheck and build passed.
 - Local service migrations and PostgreSQL/RabbitMQ vertical scenarios passed as recorded in `docs/INTEGRATION_TESTING.md`.
 - Staging-preparation checks for Web, Social, Identity, Ledger, Contracts, Kong and Render Blueprint passed as recorded in `docs/STAGING_DEPLOY_STATE.md`.
-- Current Mobile checks: 53/53 tests; typecheck, lint, build, Expo app config, and EAS JSON syntax pass. EAS authentication PASS on 2026-10-06; project-bound config/build and public Gateway variable are NOT RUN.
-- Current Automation checks: 42/42 tests including database ownership URL parsing; typecheck, lint, and build pass. Render Blueprint validation passes with 19 planned actions; Kong staging Docker build and substituted config parse pass. One Free Render Postgres is provisioned; all four migrations pass; Identity Free service exists, first deploy/health not verified.
+- Current Mobile checks: 53/53 tests; typecheck and lint pass after the EAS config update. Expo config and EAS project info pass; local Android Expo export passed after the Contracts postinstall fix. EAS preview APK build FINISHED; device validation is NOT RUN.
+- Current Automation checks: 42/42 tests including database ownership URL parsing; typecheck, lint, and build pass. Render Blueprint validation and Kong staging Docker/config checks pass. All four service-owned migrations pass; Identity, Social, Ledger, and Automation Free services are deployed and healthy.
 - GitHub CI run `37338178757` and Security run `37338178538` PASS for `dcfb44c`; Deploy staging run `37338178878` is SKIPPED. The Vercel check fails under the inaccessible, out-of-scope `equa1` project.
 
 ## Tests Not Run
 
 - Public Web registration/verification and two-account acceptance.
 - Public health/security smoke and public Web/API E2E.
-- EAS account-bound build, Android device/emulator, public Mobile Gateway flows, offline/reconnect on device.
+- Android device/emulator, public Mobile Gateway flows, offline/reconnect on device.
 - Class test report submission and public validation matrix execution.
 
 ## Known Bugs
@@ -144,24 +147,24 @@ Unspecified split/balance/debt/settlement semantics, debt-reminder policy, and p
 - Authorized: staging/class testing only; create NEW resources; Free-only/ USD 0; no production, no paid resource, no custom domain. Stop before any action that can incur a charge.
 - Authorized: use current authenticated Vercel scope; ignore and do not modify inaccessible `equa1/equa-web-staging`; use direct-source Vercel deployment if Git import blocks.
 - Latest class-test requirement supersedes the earlier seed-only lecturer demo: self-service registration and email verification must work; pre-seeded accounts alone are insufficient.
-- Resend sender is verified and API key is ready; after Identity exists, the user will enter it directly into Render secrets. Never request or paste the key in chat.
-- Expo/EAS account authentication confirmed on 2026-10-06.
+- The user confirmed Resend sender/API secret values were entered directly in Identity Render settings. Never access or paste these values into chat.
+- Expo/EAS auth, project linking, Expo config, and `eas project:info` confirmed on 2026-10-08. Project ID `54fd6829-f137-4e48-9afb-bf0b88f348b7` is in `apps/mobile/app.config.ts`.
 - Do not paste provider secrets into chat or commit them.
 
 ## Current Blocker
 
-Current phase: credential rotation is verified; effective database role has `rolsuper=false`, `rolcreatedb=true`. Identity, Social, Ledger, and Automation migrations PASS on Render (`equa_identity`, `equa_social`, `equa_ledger`, `equa_automation_sync`) with TLS. Identity Free service `srv-db26vk6k1f9s739bmskg` first failed BUILD at global `corepack enable`; direct `corepack pnpm` fix passes locally, awaiting commit/redeploy. `RESEND_API_KEY` and `EMAIL_FROM` are unchanged; temporary Postgres allow-list is empty.
+Current phase: Safe Identity readiness wake and auth HTTP parsing are implemented, validated, and committed locally on `staging/demo`. Auth POST mutations are sent once after a successful same-origin Gateway health preflight; only the GET is retried. No Gateway code/config changes. User reports both existing accounts verified; public login and two-user E2E remain pending. Current live staging Web deployment is still dpl_4w2scTPX2oQSBcmamS3xXqysUHSq; production remains NOT READY.
 
 ## Exact Next Action
 
-Exact next action: commit/push the validated deployment-only fix (`render.yaml` plus checkpoint docs) on `staging/demo`; inspect Render auto-deploy and trigger a redeploy if none started. Inspect build/runtime logs and verify `/health`. After the service runs, continue at the existing Resend secret-entry gate; never ask for either value in chat.
+Exact next action: push the already committed auth-wake change on `staging/demo` to `origin`. Verify CI/Security and Render/Vercel deploy state; deploy Web from the committed SHA if Git integration does not do so. Then allow services to idle and exercise the first public auth flow. After a successful wake test, request reset links for the two verified accounts and stop for their manual clicks.
 
 ## Resume Instructions
 
 1. Re-read this file and `docs/STAGING_DEPLOY_STATE.md`; inspect Git and provider state again.
-2. Continue with Resend secret setup through provider secret storage; do not bypass Identity verification.
-3. Recheck the current working-tree Blueprint and owned Automation database behavior before creating any resources; do not enable Notification/RabbitMQ unless the class-test flow requires their delivery.
-4. Provision only explicitly Free resources, run owned migrations, deploy in dependency order, then run public Web acceptance.
+2. Run the public Gateway smoke tests; preserve this single Free service.
+3. Reconcile this checkpoint before each provider mutation; keep Notification/RabbitMQ omitted from the Free topology.
+4. Await user clicks on both email verification links, verify both logins, then finish public Web acceptance; continue to Mobile/EAS build and native validation.
 5. Audit/complete Mobile, configure public Gateway, produce an Android preview APK only if EAS/local tooling is authorized and free, then run actual device tests.
 6. Keep `docs/CLASS_TEST.md`, `docs/CLASS_TEST_VALIDATION.md`, and this state file truthful. Never claim NOT RUN as PASS.
 7. Do not merge, force-push, reset, clean, modify production, or expose secrets.

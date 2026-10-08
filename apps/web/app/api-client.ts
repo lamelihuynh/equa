@@ -5,6 +5,12 @@ export const apiBaseUrl = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/v1'
 ).replace(/\/+$/, '');
 
+const identityWakeRetryDelaysMs = [
+  2_000, 4_000, 8_000, 16_000, 20_000, 20_000, 20_000, 20_000, 20_000,
+] as const;
+const transientGatewayStatuses = new Set([502, 503, 504]);
+const identityWakeBudgetMs = identityWakeRetryDelaysMs.reduce((total, delay) => total + delay, 0);
+
 let refreshInFlight: { expectedToken: string; promise: Promise<string | undefined> } | undefined;
 
 export class ApiClientError extends Error {
@@ -23,6 +29,44 @@ export class SessionExpiredError extends ApiClientError {
     super('Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.', 401, 'SESSION_EXPIRED');
     this.name = 'SessionExpiredError';
   }
+}
+
+/** Wakes Identity safely through the Gateway before sending an auth mutation exactly once. */
+export async function authJson(path: string, payload: unknown): Promise<unknown> {
+  const serialized = JSON.stringify(payload);
+  if (serialized === undefined)
+    throw new ApiClientError('Không thể tạo nội dung yêu cầu xác thực.', 400);
+
+  await waitForIdentityThroughGateway();
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/${path.replace(/^\//, '')}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Correlation-ID': crypto.randomUUID(),
+      },
+      body: serialized,
+    });
+  } catch {
+    throw new ApiClientError(
+      'Không nhận được phản hồi từ Gateway khi gửi yêu cầu xác thực. Hãy kiểm tra kết nối rồi thử lại.',
+      0,
+      'AUTH_NETWORK_ERROR',
+    );
+  }
+
+  const value = await readJsonBody(response);
+  if (!response.ok) throw authResponseError(response.status, value);
+  if (value === undefined)
+    throw new ApiClientError(
+      `Gateway returned a non-JSON response (HTTP ${response.status}).`,
+      response.status,
+      'NON_JSON_AUTH_RESPONSE',
+    );
+  return value;
 }
 
 export function isLocalDemoSession(): boolean {
@@ -216,4 +260,97 @@ function expireSession(expectedToken: string): void {
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+async function waitForIdentityThroughGateway(): Promise<void> {
+  const readyUrl = identityReadinessUrl();
+  const deadline = Date.now() + identityWakeBudgetMs;
+  let lastStatus: number | undefined;
+  let lastFailureWasNetwork = false;
+
+  for (let attempt = 0; attempt <= identityWakeRetryDelaysMs.length; attempt += 1) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+
+    const controller = new AbortController();
+    const timeout = globalThis.setTimeout(() => controller.abort(), Math.min(8_000, remaining));
+    try {
+      const response = await fetch(readyUrl, {
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+
+      const healthBody = response.ok ? await readJsonBody(response) : undefined;
+      if (isRecord(healthBody) && healthBody.status === 'ok' && healthBody.service === 'identity')
+        return;
+
+      lastStatus = response.ok ? 502 : response.status;
+      lastFailureWasNetwork = false;
+      if (!transientGatewayStatuses.has(lastStatus)) {
+        throw authResponseError(lastStatus, await readJsonBody(response), 'Identity readiness');
+      }
+      await response.body?.cancel();
+    } catch (error) {
+      if (error instanceof ApiClientError) throw error;
+      lastStatus = undefined;
+      lastFailureWasNetwork = true;
+    } finally {
+      globalThis.clearTimeout(timeout);
+    }
+
+    const delay = identityWakeRetryDelaysMs[attempt];
+    if (delay !== undefined) await wait(Math.min(delay, Math.max(0, deadline - Date.now())));
+  }
+
+  if (lastStatus !== undefined)
+    throw new ApiClientError(
+      `Dịch vụ xác thực chưa sẵn sàng sau khoảng 2 phút (HTTP ${lastStatus}). Hãy thử lại sau.`,
+      lastStatus,
+      'IDENTITY_NOT_READY',
+    );
+  throw new ApiClientError(
+    lastFailureWasNetwork
+      ? 'Không thể kết nối tới dịch vụ xác thực qua Gateway sau khoảng 2 phút.'
+      : 'Dịch vụ xác thực chưa sẵn sàng sau khoảng 2 phút.',
+    0,
+    'IDENTITY_NOT_READY',
+  );
+}
+
+function identityReadinessUrl(): string {
+  if (apiBaseUrl === '/v1') return `${apiBaseUrl}/auth/_ready`;
+  return `${apiBaseUrl.replace(/\/v1\/?$/, '')}/health`;
+}
+
+async function readJsonBody(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return undefined;
+  }
+}
+
+function authResponseError(
+  status: number,
+  value: unknown,
+  context = 'Yêu cầu xác thực',
+): ApiClientError {
+  const body = isRecord(value) ? value : undefined;
+  const code = typeof body?.code === 'string' ? body.code : undefined;
+  const codeSuffix = code ? ` (${code})` : '';
+  if (typeof body?.message === 'string')
+    return new ApiClientError(`HTTP ${status}${codeSuffix}: ${body.message}`, status, code);
+
+  if (status === 502 || status === 503 || status === 504)
+    return new ApiClientError(
+      `Gateway/Identity chưa sẵn sàng (HTTP ${status}). Hãy thử lại sau.`,
+      status,
+      code,
+    );
+  return new ApiClientError(`${context} thất bại (HTTP ${status}${codeSuffix}).`, status, code);
+}
+
+function wait(delayMs: number): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, delayMs));
 }

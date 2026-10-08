@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 
-import { apiBaseUrl, isRecord, LOCAL_DEMO_TOKEN } from './api-client';
+import { authJson, isRecord, LOCAL_DEMO_TOKEN } from './api-client';
 type Mode = 'login' | 'signup' | 'forgot';
 interface ApiResponse {
   message?: string;
@@ -65,17 +65,10 @@ export default function Home() {
           ? { email: data.get('email'), password: data.get('password') }
           : { email: data.get('email') };
     setLoading(true);
-    setMessage('');
+    setMessage('Đang kết nối với dịch vụ xác thực…');
     try {
-      const response = await fetch(`${apiBaseUrl}/${endpoint}`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', 'X-Correlation-ID': crypto.randomUUID() },
-        body: JSON.stringify(body),
-      });
-      const result: unknown = await response.json();
+      const result = await authJson(endpoint, body);
       const apiResult = isApiResponse(result) ? result : {};
-      if (!response.ok) throw new Error(apiResult.message ?? 'Không thể hoàn tất yêu cầu.');
       if (mode === 'login') {
         if (!apiResult.accessToken) throw new Error('Identity không trả về access token.');
         sessionStorage.setItem('equa_access_token', apiResult.accessToken);

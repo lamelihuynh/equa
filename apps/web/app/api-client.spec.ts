@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  apiBaseUrl,
+  authJson,
   apiJson,
+  ApiClientError,
   getMutationIdempotencyKey,
   LOCAL_DEMO_TOKEN,
   logoutSession,
   SessionExpiredError,
 } from './api-client.js';
-import type { ApiClientError } from './api-client.js';
 
 function stubBrowser(token = 'old-token'): Map<string, string> {
   const values = new Map<string, string>([['equa_access_token', token]]);
@@ -20,9 +22,162 @@ function stubBrowser(token = 'old-token'): Map<string, string> {
   return values;
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe('Equa web API client', () => {
+  it('wakes Identity through the Gateway before sending one auth POST', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response('{"status":"ok","service":"identity"}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response('{"accessToken":"fresh-token"}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetcher);
+
+    await expect(
+      authJson('auth/login', { email: 'test@example.com', password: 'password' }),
+    ).resolves.toEqual({
+      accessToken: 'fresh-token',
+    });
+
+    const [readyUrl, readyInit] = fetcher.mock.calls[0] ?? [];
+    expect(requestUrl(readyUrl!)).toContain(apiBaseUrl === '/v1' ? '/v1/auth/_ready' : '/health');
+    expect(readyInit?.method).toBe('GET');
+    expect(readyInit?.cache).toBe('no-store');
+
+    const [loginUrl, loginInit] = fetcher.mock.calls[1] ?? [];
+    expect(requestUrl(loginUrl!)).toContain('/auth/login');
+    expect(loginInit?.method).toBe('POST');
+    expect(loginInit?.credentials).toBe('include');
+    expect(new Headers(loginInit?.headers).get('Content-Type')).toBe('application/json');
+    expect(typeof loginInit?.body).toBe('string');
+    if (typeof loginInit?.body === 'string')
+      expect(JSON.parse(loginInit.body)).toEqual({
+        email: 'test@example.com',
+        password: 'password',
+      });
+  });
+
+  it('retries only the safe readiness GET, then sends one auth POST', async () => {
+    vi.useFakeTimers();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('<html>starting</html>', { status: 502 }))
+      .mockResolvedValueOnce(
+        new Response('{"status":"ok","service":"identity"}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response('{"accepted":true}', {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetcher);
+
+    const request = authJson('auth/forgot-password', { email: 'test@example.com' });
+    await vi.advanceTimersByTimeAsync(2_000);
+    await expect(request).resolves.toEqual({ accepted: true });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher.mock.calls[0]?.[1]?.method).toBe('GET');
+    expect(fetcher.mock.calls[1]?.[1]?.method).toBe('GET');
+    expect(fetcher.mock.calls[2]?.[1]?.method).toBe('POST');
+  });
+
+  it('shows an HTTP error for non-JSON Gateway responses without replaying the auth POST', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response('{"status":"ok","service":"identity"}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response('<!DOCTYPE html><html>Bad Gateway</html>', {
+          status: 502,
+          headers: { 'content-type': 'text/html' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetcher);
+
+    let caught: unknown;
+    try {
+      await authJson('auth/reset-password', { token: 'opaque', password: 'new-password' });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ApiClientError);
+    if (caught instanceof ApiClientError) {
+      expect(caught.status).toBe(502);
+      expect(caught.message).toContain('HTTP 502');
+    }
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[0]?.[1]?.method).toBe('GET');
+    expect(fetcher.mock.calls[1]?.[1]?.method).toBe('POST');
+  });
+
+  it('does not retry an expired verification token after the readiness probe succeeds', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response('{"status":"ok","service":"identity"}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response('{"code":"AUTH_TOKEN_EXPIRED","message":"Token is invalid or expired."}', {
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetcher);
+
+    let caught: unknown;
+    try {
+      await authJson('auth/verify-email', { token: 'synthetic-expired-token' });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ApiClientError);
+    if (caught instanceof ApiClientError) {
+      expect(caught.status).toBe(400);
+      expect(caught.code).toBe('AUTH_TOKEN_EXPIRED');
+    }
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry permanent readiness failures', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response('{"message":"Forbidden"}', {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetcher);
+
+    await expect(
+      authJson('auth/login', { email: 'test@example.com', password: 'password' }),
+    ).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it('sends the access token and includes Identity refresh cookies', async () => {
     stubBrowser();
     const fetcher = vi

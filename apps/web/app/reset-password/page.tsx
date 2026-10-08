@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/v1';
+import { authJson } from '../api-client';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -33,18 +33,9 @@ export default function ResetPasswordPage() {
     }
 
     setLoading(true);
-    setMessage('');
+    setMessage('Đang kết nối với dịch vụ xác thực…');
     try {
-      const response = await fetch(`${apiBaseUrl}/auth/reset-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Correlation-ID': crypto.randomUUID(),
-        },
-        body: JSON.stringify({ token, password }),
-      });
-      const body = await readBody(response);
-      if (!response.ok) throw new Error(body.message ?? 'Không thể đặt lại mật khẩu.');
+      await authJson('auth/reset-password', { token, password });
       setCompleted(true);
       setMessage('Mật khẩu đã được đặt lại. Hãy đăng nhập bằng mật khẩu mới.');
     } catch (error) {
@@ -110,13 +101,4 @@ export default function ResetPasswordPage() {
       </section>
     </main>
   );
-}
-
-async function readBody(response: Response): Promise<{ message?: string }> {
-  try {
-    const body: unknown = await response.json();
-    return typeof body === 'object' && body !== null ? body : {};
-  } catch {
-    return {};
-  }
 }

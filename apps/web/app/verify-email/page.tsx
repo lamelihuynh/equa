@@ -3,15 +3,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000/v1';
+import { ApiClientError, authJson } from '../api-client';
 
 type VerificationState = 'checking' | 'success' | 'error';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
   const started = useRef(false);
+  const verificationToken = useRef<string | null>(null);
   const [state, setState] = useState<VerificationState>('checking');
   const [message, setMessage] = useState('Đang xác minh địa chỉ email của bạn…');
+  const [canRetry, setCanRetry] = useState(false);
 
   useEffect(() => {
     if (started.current) return;
@@ -24,25 +26,21 @@ export default function VerifyEmailPage() {
       return;
     }
 
+    verificationToken.current = token;
     void verify(token);
   }, []);
 
   async function verify(token: string) {
+    setState('checking');
+    setCanRetry(false);
+    setMessage('Đang kết nối với dịch vụ xác thực…');
     try {
-      const response = await fetch(`${apiBaseUrl}/auth/verify-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Correlation-ID': crypto.randomUUID(),
-        },
-        body: JSON.stringify({ token }),
-      });
-      const body = await readBody(response);
-      if (!response.ok) throw new Error(body.message ?? 'Không thể xác minh email này.');
+      await authJson('auth/verify-email', { token });
       setState('success');
       setMessage('Email đã được xác minh. Bây giờ bạn có thể đăng nhập vào Equa.');
     } catch (error) {
       setState('error');
+      setCanRetry(error instanceof ApiClientError && [0, 502, 503, 504].includes(error.status));
       setMessage(error instanceof Error ? error.message : 'Đã có lỗi xảy ra khi xác minh email.');
     }
   }
@@ -55,20 +53,26 @@ export default function VerifyEmailPage() {
         <p className={`authActionMessage ${state}`}>{message}</p>
         {state === 'checking' ? <span className="loadingDot" aria-label="Đang xử lý" /> : null}
         {state !== 'checking' ? (
-          <button className="primaryBtn" type="button" onClick={() => router.replace('/')}>
-            {state === 'success' ? 'Đăng nhập' : 'Quay về trang đăng nhập'}
+          <button
+            className="primaryBtn"
+            type="button"
+            onClick={() => {
+              const token = verificationToken.current;
+              if (canRetry && token) {
+                void verify(token);
+                return;
+              }
+              router.replace('/');
+            }}
+          >
+            {state === 'success'
+              ? 'Đăng nhập'
+              : canRetry
+                ? 'Thử xác minh lại'
+                : 'Quay về trang đăng nhập'}
           </button>
         ) : null}
       </section>
     </main>
   );
-}
-
-async function readBody(response: Response): Promise<{ message?: string }> {
-  try {
-    const body: unknown = await response.json();
-    return typeof body === 'object' && body !== null ? body : {};
-  } catch {
-    return {};
-  }
 }

@@ -26,6 +26,10 @@ const nextConfig: NextConfig = {
         rewrites() {
           return [
             {
+              source: '/v1/auth/_ready',
+              destination: `${gatewayUrl}/health`,
+            },
+            {
               source: '/v1/:path*',
               destination: `${gatewayUrl}/v1/:path*`,
             },
