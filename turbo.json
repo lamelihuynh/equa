@@ -3,7 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "env": ["EQUA_GATEWAY_URL"],
+      "env": ["EQUA_GATEWAY_URL", "EQUA_IDENTITY_HEALTH_URL"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "dev": {

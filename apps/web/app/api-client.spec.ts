@@ -61,6 +61,42 @@ describe('Equa web API client', () => {
     expect(fetcher.mock.calls[1]?.[1]?.method).toBe('POST');
   });
 
+  it('wakes Identity directly before Gateway and sends only one auth mutation', async () => {
+    vi.useFakeTimers();
+    const identityUrl = 'https://equa-staging-demo-identity.onrender.com/health';
+    const gatewayUrl = 'https://equa-staging-demo-gateway.onrender.com/health';
+    vi.stubEnv('NEXT_PUBLIC_IDENTITY_HEALTH_URL', identityUrl);
+    vi.stubEnv('NEXT_PUBLIC_GATEWAY_HEALTH_URL', gatewayUrl);
+    const healthResponse = () =>
+      new Response('{"status":"ok","service":"identity"}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('<html>starting</html>', { status: 502 }))
+      .mockResolvedValueOnce(healthResponse())
+      .mockResolvedValueOnce(healthResponse())
+      .mockResolvedValueOnce(
+        new Response('{"accepted":true}', {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetcher);
+
+    const request = authJson('auth/forgot-password', { email: 'test@example.com' });
+    await vi.advanceTimersByTimeAsync(2_000);
+    await expect(request).resolves.toEqual({ accepted: true });
+
+    expect(fetcher.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+      [identityUrl, 'GET'],
+      [identityUrl, 'GET'],
+      [gatewayUrl, 'GET'],
+      [`${apiBaseUrl}/auth/forgot-password`, 'POST'],
+    ]);
+  });
+
   it('wakes Identity through the Gateway before sending one auth POST', async () => {
     const fetcher = vi
       .fn<typeof fetch>()

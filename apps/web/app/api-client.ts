@@ -263,8 +263,17 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 async function waitForIdentityThroughGateway(): Promise<void> {
-  const readyUrl = identityReadinessUrl();
   const deadline = Date.now() + identityWakeBudgetMs;
+  const identityHealthUrl = process.env.NEXT_PUBLIC_IDENTITY_HEALTH_URL;
+  if (identityHealthUrl) await waitForReadiness(identityHealthUrl, 'Identity', deadline);
+  await waitForReadiness(gatewayReadinessUrl(), 'Gateway', deadline);
+}
+
+async function waitForReadiness(
+  readyUrl: string,
+  serviceName: 'Identity' | 'Gateway',
+  deadline: number,
+): Promise<void> {
   let lastStatus: number | undefined;
   let lastFailureWasNetwork = false;
 
@@ -288,7 +297,11 @@ async function waitForIdentityThroughGateway(): Promise<void> {
       lastStatus = response.ok ? 502 : response.status;
       lastFailureWasNetwork = false;
       if (!transientGatewayStatuses.has(lastStatus)) {
-        throw authResponseError(lastStatus, await readJsonBody(response), 'Identity readiness');
+        throw authResponseError(
+          lastStatus,
+          await readJsonBody(response),
+          `${serviceName} readiness`,
+        );
       }
       await response.body?.cancel();
     } catch (error) {
@@ -305,20 +318,20 @@ async function waitForIdentityThroughGateway(): Promise<void> {
 
   if (lastStatus !== undefined)
     throw new ApiClientError(
-      `Dịch vụ xác thực chưa sẵn sàng sau khoảng 2 phút (HTTP ${lastStatus}). Hãy thử lại sau.`,
+      `${serviceName} chưa sẵn sàng sau khoảng 2 phút (HTTP ${lastStatus}). Hãy thử lại sau.`,
       lastStatus,
       'IDENTITY_NOT_READY',
     );
   throw new ApiClientError(
     lastFailureWasNetwork
-      ? 'Không thể kết nối tới dịch vụ xác thực qua Gateway sau khoảng 2 phút.'
-      : 'Dịch vụ xác thực chưa sẵn sàng sau khoảng 2 phút.',
+      ? `Không thể kết nối tới ${serviceName} sau khoảng 2 phút.`
+      : `${serviceName} chưa sẵn sàng sau khoảng 2 phút.`,
     0,
     'IDENTITY_NOT_READY',
   );
 }
 
-function identityReadinessUrl(): string {
+function gatewayReadinessUrl(): string {
   const directGatewayHealthUrl = process.env.NEXT_PUBLIC_GATEWAY_HEALTH_URL;
   if (directGatewayHealthUrl) return directGatewayHealthUrl;
   if (apiBaseUrl === '/v1') return `${apiBaseUrl}/auth/_ready`;

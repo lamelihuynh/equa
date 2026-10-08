@@ -39,7 +39,7 @@ DIRTY. Code, deployment source, and issue template are pushed. Current local-onl
 
 ## Current Phase
 
-Provider recheck 2026-10-08: Render Free services/Postgres are available. Gateway remains LIVE at SHA fec7ead. The auth wake fix now uses the public Gateway `/health` URL directly from the browser; the Gateway returns CORS for the staging Web origin. A Chrome-origin GET returned Identity health HTTP 200 at 16:40:54 UTC. The previous same-origin Vercel rewrite preflight returned repeated 502 after idle; a docs-only push also auto-deployed Identity and interrupted one preflight. Two forgot-password POSTs later returned HTTP 202 after warm readiness; reset email clicks and account login remain pending. Direct Gateway health wake is locally tested but not yet deployed. Web tests 21/21, typecheck, lint, Prettier, local build, Vercel-mode build, and direct CORS probe pass. No backend business logic or Gateway config changed. Render Free Shell/SSH is unavailable; no paid access used. Production remains NOT READY.
+Provider recheck 2026-10-09: Direct Gateway health wake commit `0006629` failed its full 130-second cold budget. Kong logged five `/health` GETs, all HTTP 502, from 17:40:09 through 17:41:29 UTC; Identity had no corresponding logs and no later 200. A later direct public Identity `/health` GET returned HTTP 200 but omitted `Access-Control-Allow-Origin`. Root cause: Gateway-to-Identity does not wake the sleeping Render Free Identity service reliably; direct browser wake also needs route-scoped CORS. Local fix now allows only the exact staging Web origin on Identity `GET /health`; Web checks direct Identity, then Gateway, within one shared 130-second GET budget. Auth mutations remain single-shot through Gateway. Identity tests 17/17 and Web tests 22/22; affected typechecks, lints, and builds pass. Plain production Vercel env `EQUA_IDENTITY_HEALTH_URL` is now configured; code remains uncommitted/undeployed. No auth mutation/reset email was sent after the full-budget failure. Production remains NOT READY.
 
 ## Current Architecture
 
@@ -97,7 +97,7 @@ Free Postgres provisioned; four service-owned migrations pass. Render inventory 
 | Render   | Ledger                       | https://equa-staging-demo-ledger.onrender.com               | Free  | srv-db3fb26i0phs739ui1h0; direct `/health` returned 200 after ~53s wakeup                                                                    |
 | Render   | Automation                   | https://equa-staging-demo-automation.onrender.com           | Free  | srv-db3fdkdg1s2s73a7qe20; direct `/health` returned 200 on retry                                                                             |
 | Render   | Gateway                      | https://equa-staging-demo-gateway.onrender.com              | Free  | srv-db3g1c0m7kps73ehfrc0; deploy live; `/health` returned 200 after wakeup                                                                   |
-| Vercel   | equa-staging-demo-web        | https://equa-staging-demo-web.vercel.app                    | Hobby | prj_itv1H6yyMa0B4RSZIxgxhsJKH8UG; READY deployment dpl_6KmVAA9kc3wGyQFGsVDLtLUTZ1bK; source=clean worktree at c34aa69; stable alias assigned |
+| Vercel   | equa-staging-demo-web        | https://equa-staging-demo-web.vercel.app                    | Hobby | prj_itv1H6yyMa0B4RSZIxgxhsJKH8UG; READY deployment dpl_HLH2BJLkMyed9FN8t27p4A136xuW; source=clean worktree at 0006629; stable alias assigned |
 | Vercel   | Existing unrelated project   | `vibefeed1-hcmutcuatiky.vercel.app`                         | Hobby | Leave untouched                                                                                                                              |
 
 ## Database State
@@ -153,11 +153,11 @@ Unspecified split/balance/debt/settlement semantics, debt-reminder policy, and p
 
 ## Current Blocker
 
-Current phase: The previous auth wake helper at c34aa69 is committed and pushed; a focused repair now targets the public Gateway health URL directly from the browser so Render sees the wake request. CORS is verified from the Web origin; Web tests 21/21, lint, typecheck, Prettier, and local/Vercel-mode builds pass. This direct wake change is not yet committed/deployed. The warm public flow sent reset requests for both existing accounts (HTTP 202); no passwords changed. Render auto-deploys Identity on every new commit, including docs-only commits, so the next push will restart Identity. No Gateway config changes. Production remains NOT READY.
+Current phase: The direct Gateway health strategy failed after its full 130-second budget. The focused replacement is implemented locally: Identity adds exact-origin CORS only to its health route, and Web probes Identity directly before Gateway while sending all mutations through Gateway. Web 22/22 and Identity 17/17 tests, typechecks, lint, builds, and Vercel-mode build pass. Vercel's plain production Identity health URL env is set. Existing reset emails remain unclicked; none have been requested after failure. Code needs commit/push and deployment. Production remains NOT READY.
 
 ## Exact Next Action
 
-Exact next action: stage only `apps/web/app/api-client.ts`, `apps/web/app/api-client.spec.ts`, `apps/web/next.config.ts`, and the three checkpoint docs; commit and push the direct Gateway health wake fix. Verify CI/Security and Render's automatic Identity deploy; deploy Web to the existing Vercel project from that commit. Then allow Gateway/Identity to idle and ask the user to click the already-issued reset links, which will exercise the deployed auth readiness flow before its single reset POST.
+Exact next action: finish targeted Prettier/diff checks; commit/push the tested Identity health, Web readiness, Turbo env, and checkpoint changes. Verify CI/Security and Render's automatic Identity deploy, deploy Web from that commit, wait for rollout plus 15 minutes idle, and require direct Identity then Gateway health 200s before asking the user to click existing reset links. Do not create more reset links or send auth mutations before that passes.
 
 ## Resume Instructions
 

@@ -4,7 +4,7 @@ Updated: 2026-10-08 (Asia/Saigon). No credentials are recorded here.
 
 ## Current phase
 
-Provider recheck 2026-10-08: The existing Vercel deployment `dpl_6KmVAA9kc3wGyQFGsVDLtLUTZ1bK` is READY from c34aa69; a direct browser-origin GET to the public Gateway `/health` returned HTTP 200 Identity JSON with CORS allowed. The local direct wake fix derives `NEXT_PUBLIC_GATEWAY_HEALTH_URL` from the existing `EQUA_GATEWAY_URL` during Vercel builds and remains undeployed. Web tests 21/21, lint, typecheck, Prettier, local and Vercel-mode builds pass. Two warm public forgot-password requests returned HTTP 202; reset emails await user clicks. Render's auto-deploy restarted Identity from docs commit d68d8f1; the next code push will trigger another Identity rollout. Gateway remains on SHA fec7ead with no Gateway code/config changes. Production remains NOT READY.
+Provider recheck 2026-10-09: The full 130-second direct Gateway readiness budget failed. Kong logged five `GET /health` responses at 17:40:09, 17:40:26, 17:40:47, 17:41:08, and 17:41:29 UTC, all HTTP 502; Identity had no corresponding requests and no 200 appeared through budget expiry at ~17:42:19 UTC. A later direct public Identity `/health` call returned 200 without ACAO. Local fix adds ACAO only for `APP_WEB_URL` on Identity `GET /health`, then Web probes Identity directly before Gateway with a shared 130-second GET budget. Auth mutations remain single-shot through Gateway. Identity tests 17/17 and Web tests 22/22; relevant typechecks/lints/builds pass. Plain production Vercel env `EQUA_IDENTITY_HEALTH_URL` is configured; code/deployment is pending. Do not send auth mutations or reset emails until a real idle→wake→200 test passes. Production remains NOT READY.
 
 ## Source and worktree
 
@@ -19,7 +19,7 @@ Provider recheck 2026-10-08: The existing Vercel deployment `dpl_6KmVAA9kc3wGyQF
 ## Provider inventory (reconciled 2026-10-08)
 
 - Render workspace `equa` (`tea-db1jlktg1s2s73agmkog`) lists the Free Postgres `dpg-db24cj17lnhs73dib9l0-a` and five Free, not-suspended services in Singapore. All five direct `/health` endpoints now return 200 after wakeup. Gateway and Vercel API auth-guard GETs return 401 without a token, and CORS preflight returns 200. Four service-owned migrations remain PASS. Postgres `ipAllowList` is empty; rotated credential remains private.
-- Vercel Hobby workspace `ti-ky-s-projects` has existing project `equa-staging-demo-web` (`prj_itv1H6yyMa0B4RSZIxgxhsJKH8UG`), using Next.js root `apps/web` and the public Gateway env. Latest deployment `dpl_6KmVAA9kc3wGyQFGsVDLtLUTZ1bK` is READY and aliased to `equa-staging-demo-web.vercel.app`; source is the clean Git worktree at committed SHA c34aa69. SSO is disabled only for this staging project.
+- Vercel Hobby workspace `ti-ky-s-projects` has existing project `equa-staging-demo-web` (`prj_itv1H6yyMa0B4RSZIxgxhsJKH8UG`), using Next.js root `apps/web` and the public Gateway env. Latest deployment `dpl_HLH2BJLkMyed9FN8t27p4A136xuW` is READY and aliased to `equa-staging-demo-web.vercel.app`; source is the clean Git worktree at committed SHA 0006629. SSO is disabled only for this staging project.
 - EAS `whoami`, Expo config, and `eas project:info` PASS on 2026-10-08 (`tikyisme`, project ID `54fd6829-f137-4e48-9afb-bf0b88f348b7`). `apps/mobile/app.config.ts` and preview Gateway variable are linked; EAS preview APK build FINISHED.
 - The inaccessible `equa1/equa-web-staging` scope is not required and must not be modified. No DNS was changed.
 - The current local `.env` selects `EMAIL_PROVIDER=mailpit`; it has no `RESEND_API_KEY`. This proves no local key is configured, not whether a Resend account exists.
@@ -40,10 +40,10 @@ Mobile has an internal preview APK profile in `apps/mobile/eas.json` using the E
 
 ## URLs and distribution
 
-Frontend: https://equa-staging-demo-web.vercel.app (deployment dpl_6KmVAA9kc3wGyQFGsVDLtLUTZ1bK READY; root GET 200; public `/v1/auth/_ready` GET 200 with Identity health JSON through Kong).
+Frontend: https://equa-staging-demo-web.vercel.app (deployment dpl_HLH2BJLkMyed9FN8t27p4A136xuW READY; root GET 200; direct Gateway health CORS probe returned Identity health JSON).
 Gateway: https://equa-staging-demo-gateway.onrender.com (latest deploy live; `/health` and CORS preflight return 200; GET `/v1/friends`, `/v1/expenses`, `/v1/sync/feed` return expected 401 without a bearer token).
 Android APK: https://expo.dev/artifacts/eas/UZOSEWChdoOUB1iaRiNlR3sXsdgxiq_o5M20s875uM4.apk (internal preview; download verified HTTP 200, 76,241,972 bytes; expires 2026-10-22; device installation NOT RUN).
-Vercel project: equa-staging-demo-web; deployment dpl_6KmVAA9kc3wGyQFGsVDLtLUTZ1bK READY at https://equa-staging-demo-web.vercel.app. Source SHA c34aa69 from a clean worktree; public readiness route returned Identity health JSON via Kong at 15:37:27 UTC.
+Vercel project: equa-staging-demo-web; deployment dpl_HLH2BJLkMyed9FN8t27p4A136xuW READY at https://equa-staging-demo-web.vercel.app. Source SHA 0006629 from a clean worktree; root returned HTTP 200.
 
 ## Validation
 
@@ -80,4 +80,4 @@ Historical local test/build evidence remains in `docs/PROJECT_EXECUTION_STATE.md
 - Resend secrets were entered directly into Identity Render settings; values remain unseen and must not be read or shared.
 - Expo/EAS authentication and Free-only Render authorization are confirmed. Stop before any action showing a non-zero charge.
 
-Four service-owned migrations PASS. The auth preflight now uses the direct public Gateway health URL from the browser; the same-origin auth mutation remains a single POST after identity health JSON. CORS is verified from the staging Web origin. No Gateway code/config changed. Free Shell/SSH direct container testing is NOT RUN; no paid plan used. A warm direct preflight plus two forgot-password POSTs returned 200/202/202. Existing reset emails await manual clicks. The direct wake code is not deployed yet; next commit will auto-deploy Identity, so wait for rollout and idle before the user tests the email link.
+Four service-owned migrations PASS. Direct Gateway health CORS was confirmed from the staging origin, but Gateway `/health` did not wake Identity during cold start. Direct Identity health returned 200 but lacked ACAO. Local fix implements route-scoped Identity health CORS and sequential direct Identity then Gateway readiness; single auth POSTs only after both return expected JSON. No Gateway code/config changed. Free Shell/SSH direct container testing is NOT RUN; no paid plan used. No reset/auth mutation was sent after the full-budget failure. Vercel Identity health URL env is configured; commit/deploy the fix, then run a full idle/wake test before asking the user to click existing links.
