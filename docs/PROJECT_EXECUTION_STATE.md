@@ -6,8 +6,8 @@ Updated: 2026-10-09. Canonical checkpoint for the public staging class-test buil
 
 - Verdict: **CLASS TEST DEPLOYMENT: NOT READY**.
 - Production: **NOT READY**.
-- Product fix `80a0976` and checkpoint/format commits through `99bf5a9` are pushed to `staging/demo`; remote tip is `99bf5a936cf4d0498fbfaa8d2bc9c2c623b314ae`.
-- The authorized Vercel project is `equa-staging-demo-web`; production env metadata confirms the public Social and Ledger `/health` URLs are configured. Current deployment SHA must be rechecked after the candidate push.
+- Product fix `80a0976` and checkpoint/format commits through `99bf5a9` are pushed to `staging/demo`; remote tip is `99bf5a936cf4d0498fbfaa8d2bc9c2c623b314ae`. Turbo env fix `a24bcb3b9660d6533bf6f201f7b719f189d50218` is committed locally but not pushed.
+- The authorized Vercel project is `equa-staging-demo-web`; production env metadata confirms the public Social and Ledger `/health` URLs are configured. Deployment `dpl_8mN6yZeLbRE1VG4fvVJXdSKJkefP` failed on the old Turbo env list; the local fix passes an actual Vercel-equivalent Turbo build.
 - Render services use Free plans. Previously observed LIVE state and CI `37910030413` / Security `37910029964` PASS apply to the prior committed release, not this candidate.
 - The earlier auth-only public smoke passed, but the later authenticated product flow failed as recorded below.
 
@@ -36,4 +36,4 @@ GitHub also reports a failing `Vercel` status context for a separate `equa-web-s
 
 ## Exact next action
 
-Run final targeted formatting and diff checks, commit/push the `turbo.json` fix with its checkpoint docs, verify fresh CI/Security, and create a new Vercel deployment from that exact SHA. Then wait for Render Free services to sleep naturally and guide the user through one public login-to-Dashboard/Friends/Groups/Expenses cold cycle at a time, correlating Render logs. Repeat after a second independent natural idle period. Keep the verdict NOT READY unless both cycles prove Social and Ledger woke and product requests returned non-5xx.
+Push the locally committed Turbo fix and checkpoint update to `staging/demo`, verify fresh CI/Security, and create a Vercel deployment from the resulting exact SHA. Then wait for Render Free services to sleep naturally and guide the user through one public login-to-Dashboard/Friends/Groups/Expenses cold cycle at a time, correlating Render logs. Repeat after a second independent natural idle period. Keep the verdict NOT READY unless both cycles prove Social and Ledger woke and product requests returned non-5xx.
