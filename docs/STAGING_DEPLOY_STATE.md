@@ -1,6 +1,6 @@
 # Staging Deployment State
 
-Updated: 2026-10-09. Scope: public class-test staging only. Production is **NOT READY**.
+Updated: 2026-10-09. Scope: public class-test staging only. **CLASS TEST DEPLOYMENT: NOT READY. PRODUCTION READINESS: NOT READY.**
 
 ## Public URLs
 
@@ -11,12 +11,10 @@ Updated: 2026-10-09. Scope: public class-test staging only. Production is **NOT 
 
 ## Application deployment
 
-- Application fix commit: `21d716e61f93c79b2d94ca304169ee7e8626c7ff` on `staging/demo`; a separate documentation commit contains the final class-test state. The final release tip SHA is included in the handoff.
+- Current `staging/demo` / `origin/staging/demo` SHA: `8573bb34c9a8c22c9afa7dae195e54c7e851d836`. The Social/Ledger readiness fix is an uncommitted candidate; the currently deployed Web still requires a post-push deployment SHA check.
 - Vercel project: `equa-staging-demo-web`, Hobby plan, root directory `apps/web`.
-- Vercel deployment: READY, stable staging alias assigned, deployment metadata verified against the final committed staging release.
-- Render services: all five LIVE from the final committed staging release, all on Free plans.
-- Gateway was manually deployed from the pushed `staging/demo` commit after its checksPass trigger did not start; deployment `dep-db4b5cl9fdbs73bdjtj0` is LIVE.
-- GitHub CI `37910030413`: PASS. Security/CodeQL `37910029964`: PASS.
+- Vercel's existing production environment contains the correct non-secret Social and Ledger health URLs, alongside Gateway and Identity. The new build/deployment has not yet run.
+- Render services remain Free. Earlier LIVE/deploy evidence and GitHub CI `37910030413` / Security/CodeQL `37910029964` PASS apply to the previous committed release only.
 
 ## Smoke evidence
 
@@ -24,7 +22,17 @@ Updated: 2026-10-09. Scope: public class-test staging only. Production is **NOT 
 - Gateway `/health`: HTTP 200, `status=ok`.
 - Identity `/health`: HTTP 200, `status=ok`.
 - Public synthetic login for a non-existent `.invalid` email: HTTP 401 `AUTH_INVALID_CREDENTIALS` (expected application response).
-- No 5xx occurred in the minimal smoke set.
+- Earlier minimal smoke of Web root/login and service health passed; later authenticated product navigation exposed the cold-service blocker below.
+
+## Blocking authenticated product cold-start failure
+
+At approximately 2026-10-09 14:16 UTC, `POST /v1/auth/login` and `GET /v1/profile/me` returned HTTP 200. Subsequent `GET /v1/groups`, `/v1/expenses`, `/v1/expenses/total`, `/v1/groups/invitations`, `/v1/friends`, `/v1/friends/requests`, and `/v1/categories` returned HTTP 502. Social and Ledger had no corresponding request or startup logs. The current same-origin readiness probes cover auth services only, so product requests still encounter sleeping upstreams.
+
+The local Web candidate now probes the required Identity, Social, Ledger, and Gateway services through the same-origin Next.js readiness route before product requests; normal API calls still route through Kong. Automation is omitted because none of these Web flows currently calls it. Local validation is 41/41 Web tests, typecheck, lint, targeted Prettier, local build, Vercel-mode build, and `git diff --check`: all PASS. The candidate is not committed or deployed yet. Two authenticated cold product cycles are **NOT RUN**.
+
+## Forgot-password email report
+
+Identity's anti-enumeration contract intentionally returns HTTP 202 whether an ACTIVE account exists or not. The report's tested address is not established from available evidence. A read-only status query was blocked because Render Postgres rejects external connections with an empty IP allowlist; no database/networking setting was changed. Therefore 202 alone does not prove provider delivery, and active status / inbox delivery remain unverified. Do not change anti-enumeration behavior.
 
 The Vercel project deployment uses Vercel's `production` target internally because this is the primary alias of the separate staging project. No Equa production project or environment was deployed.
 
@@ -37,4 +45,8 @@ The Vercel project deployment uses Vercel's `production` target internally becau
 - EAS APK exists; automated Mobile evidence is 53/53 tests with typecheck/lint/build PASS. Native Android device test: **NOT RUN**.
 - Production readiness: **NOT READY**.
 
-An unrelated GitHub status context named `Vercel` remains failed for the separate `equa-web-staging` project in an inaccessible `equa1` scope. The authorized public staging deployment above is READY; the separate project was not changed.
+## Exact next action
+
+Commit/push only the intentional Social/Ledger readiness fix and checkpoint documentation to `staging/demo`, then verify CI/Security and deploy the pushed SHA to the authorized Vercel project. Do not manually warm Render. After the services naturally sleep, perform two public authenticated product cold-start cycles, correlating Vercel readiness logs and Render Social/Ledger startup/request logs. Keep class-test status NOT READY unless both cycles pass.
+
+An unrelated GitHub status context named `Vercel` remains failed for the separate `equa-web-staging` project in an inaccessible `equa1` scope. That project was not changed. The existing authorized staging deployment is the previous committed release and must be checked again after candidate deployment.

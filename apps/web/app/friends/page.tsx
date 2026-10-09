@@ -361,7 +361,7 @@ function ApiFriendsPage() {
           </div>
           <div className="demoList">
             {loading ? (
-              <p className="emptyState">Đang tải lời mời…</p>
+              <p className="emptyState">Đang khởi động dịch vụ và tải lời mời…</p>
             ) : incoming.length ? (
               incoming.map((request) => (
                 <article className="demoRow" key={request.id}>
@@ -424,6 +424,9 @@ function ApiFriendsPage() {
       {error && (
         <p className="formMessage" role="alert">
           {error}
+          <button className="textAction" type="button" onClick={() => window.location.reload()}>
+            Thử lại
+          </button>
         </p>
       )}
       {message && (
@@ -441,7 +444,7 @@ function ApiFriendsPage() {
         </div>
         <div className="demoList">
           {loading ? (
-            <p className="emptyState">Đang tải bạn bè…</p>
+            <p className="emptyState">Đang khởi động dịch vụ và tải bạn bè…</p>
           ) : friends.length ? (
             friends.map((friend) => {
               const label = humanIdentityLabel(friend.identity);
@@ -534,7 +537,7 @@ function isPairBalance(value: unknown): value is PairBalanceDto {
 }
 
 function formatPairBalance(balance: PairBalanceDto | null | undefined): string {
-  if (balance === undefined) return 'Đang tải số dư…';
+  if (balance === undefined) return 'Đang khởi động dịch vụ và tải số dư…';
   if (balance === null) return 'Không thể tải số dư từ Ledger.';
   if (!balance.balances.length) return 'Đã cân bằng';
   return balance.balances

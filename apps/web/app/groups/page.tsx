@@ -376,6 +376,9 @@ function ApiGroupsPage() {
       {error && (
         <p className="formMessage" role="alert">
           {error}
+          <button className="textAction" type="button" onClick={() => window.location.reload()}>
+            Thử lại
+          </button>
         </p>
       )}
       {message && (
@@ -385,7 +388,7 @@ function ApiGroupsPage() {
       )}
       <section className="demoCardGrid">
         {loading ? (
-          <p className="emptyState">Đang tải nhóm…</p>
+          <p className="emptyState">Đang khởi động dịch vụ và tải nhóm…</p>
         ) : active.length ? (
           active.map((group) => (
             <article className="contentCard demoGroupCard" key={group.id}>

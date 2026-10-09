@@ -8,9 +8,21 @@ export const apiBaseUrl = (
 const identityWakeRetryDelaysMs = [
   2_000, 4_000, 8_000, 16_000, 20_000, 20_000, 20_000, 20_000, 20_000,
 ] as const;
+const productWakeRetryDelaysMs = [...identityWakeRetryDelaysMs, 20_000, 20_000, 20_000] as const;
 const readinessRequestTimeoutMs = 56_000;
+const productWakeBudgetMs = 240_000;
+const readinessCacheDurationMs = 15_000;
 const transientGatewayStatuses = new Set([502, 503, 504]);
 const identityWakeBudgetMs = identityWakeRetryDelaysMs.reduce((total, delay) => total + delay, 0);
+type ReadinessService = 'identity' | 'gateway' | 'social' | 'ledger';
+const readinessLabels: Record<ReadinessService, string> = {
+  identity: 'Identity',
+  gateway: 'Gateway',
+  social: 'Social',
+  ledger: 'Ledger',
+};
+const readinessInFlight = new Map<ReadinessService, Promise<void>>();
+const readinessCacheUntil = new Map<ReadinessService, number>();
 
 let refreshInFlight: { expectedToken: string; promise: Promise<string | undefined> } | undefined;
 
@@ -114,7 +126,15 @@ export async function getMutationIdempotencyKey(
 }
 
 export async function apiJson(path: string, init: RequestInit = {}): Promise<unknown> {
-  const response = await apiRequest(path, init);
+  let response: Response;
+  try {
+    response = await apiRequest(path, init);
+  } catch (error) {
+    if (apiBaseUrl === '/v1' && error instanceof TypeError) throw servicesStartingError(0);
+    throw error;
+  }
+  if (!response.ok && transientGatewayStatuses.has(response.status))
+    throw servicesStartingError(response.status);
   let value: unknown;
   if (response.status !== 204) {
     try {
@@ -165,7 +185,9 @@ async function apiRequest(path: string, init: RequestInit): Promise<Response> {
   if (!token || token === LOCAL_DEMO_TOKEN)
     throw new ApiClientError('Hãy đăng nhập bằng tài khoản Equa để dùng dữ liệu máy chủ.', 401);
 
-  const first = await send(path, init, token);
+  if (apiBaseUrl === '/v1') await waitForProductServices(path, init.method);
+
+  const first = await sendWithFriendlyNetworkError(path, init, token);
   if (sessionStorage.getItem('equa_access_token') !== token)
     throw new ApiClientError(
       'Phiên đăng nhập đã thay đổi trong khi gửi yêu cầu.',
@@ -191,7 +213,7 @@ async function apiRequest(path: string, init: RequestInit): Promise<Response> {
       409,
       'SESSION_CHANGED',
     );
-  const retried = await send(path, init, refreshed);
+  const retried = await sendWithFriendlyNetworkError(path, init, refreshed);
   if (sessionStorage.getItem('equa_access_token') !== refreshed)
     throw new ApiClientError(
       'Phiên đăng nhập đã thay đổi trong khi gửi yêu cầu.',
@@ -223,6 +245,23 @@ function send(path: string, init: RequestInit, token: string): Promise<Response>
     headers,
     credentials: 'include',
   });
+}
+
+async function sendWithFriendlyNetworkError(
+  path: string,
+  init: RequestInit,
+  token: string,
+): Promise<Response> {
+  try {
+    return await send(path, init, token);
+  } catch {
+    if (apiBaseUrl === '/v1') throw servicesStartingError(0);
+    throw new ApiClientError(
+      'Không thể kết nối tới máy chủ. Hãy kiểm tra kết nối rồi thử lại.',
+      0,
+      'NETWORK_ERROR',
+    );
+  }
 }
 
 function refreshAccessToken(expectedToken: string): Promise<string | undefined> {
@@ -266,22 +305,76 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 async function waitForIdentityThroughGateway(): Promise<void> {
   const deadline = Date.now() + identityWakeBudgetMs;
   if (apiBaseUrl === '/v1') {
-    await waitForReadiness(readinessUrl('identity'), 'Identity', deadline);
-    await waitForReadiness(readinessUrl('gateway'), 'Gateway', deadline);
+    await ensureServiceReadiness('identity', deadline, identityWakeRetryDelaysMs);
+    await ensureServiceReadiness('gateway', deadline, identityWakeRetryDelaysMs);
     return;
   }
-  await waitForReadiness(gatewayReadinessUrl(), 'Gateway', deadline);
+  await waitForReadiness('gateway', deadline, identityWakeRetryDelaysMs, gatewayReadinessUrl());
+}
+
+async function waitForProductServices(path: string, method?: string): Promise<void> {
+  const deadline = Date.now() + productWakeBudgetMs;
+  const services = new Set<ReadinessService>([
+    'identity',
+    ...productReadinessServices(path, method),
+  ]);
+  await Promise.all(
+    [...services].map((service) =>
+      ensureServiceReadiness(service, deadline, productWakeRetryDelaysMs),
+    ),
+  );
+  await ensureServiceReadiness('gateway', deadline, productWakeRetryDelaysMs);
+}
+
+function productReadinessServices(path: string, method?: string): ReadinessService[] {
+  const route = path.replace(/^\/+/, '').split(/[?#]/, 1)[0] ?? '';
+  const [root, resourceId, subresource] = route.split('/');
+  const httpMethod = (method ?? 'GET').toUpperCase();
+
+  if (root === 'groups') {
+    const checksDebt =
+      httpMethod === 'DELETE' && (resourceId !== undefined || subresource === 'members');
+    return checksDebt ? ['social', 'ledger'] : ['social'];
+  }
+  if (root === 'friends') {
+    const needsLedger = subresource === 'balance' || httpMethod === 'DELETE';
+    return needsLedger ? ['social', 'ledger'] : ['social'];
+  }
+  if (root === 'expenses') return ['ledger'];
+  if (root === 'categories') return ['ledger'];
+  return [];
+}
+
+async function ensureServiceReadiness(
+  service: ReadinessService,
+  deadline: number,
+  retryDelays: readonly number[],
+  readyUrl?: string,
+): Promise<void> {
+  if ((readinessCacheUntil.get(service) ?? 0) > Date.now()) return;
+  const inFlight = readinessInFlight.get(service);
+  if (inFlight) return inFlight;
+
+  const pending = waitForReadiness(service, deadline, retryDelays, readyUrl).then(() => {
+    readinessCacheUntil.set(service, Date.now() + readinessCacheDurationMs);
+  });
+  readinessInFlight.set(service, pending);
+  try {
+    await pending;
+  } finally {
+    if (readinessInFlight.get(service) === pending) readinessInFlight.delete(service);
+  }
 }
 
 async function waitForReadiness(
-  readyUrl: string,
-  serviceName: 'Identity' | 'Gateway',
+  service: ReadinessService,
   deadline: number,
+  retryDelays: readonly number[],
+  readyUrl = readinessUrl(service),
 ): Promise<void> {
   let lastStatus: number | undefined;
-  let lastFailureWasNetwork = false;
 
-  for (let attempt = 0; attempt <= identityWakeRetryDelaysMs.length; attempt += 1) {
+  for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
 
@@ -300,45 +393,43 @@ async function waitForReadiness(
       const healthBody = response.ok ? await readJsonBody(response) : undefined;
       const healthService = isRecord(healthBody) ? healthBody.service : undefined;
       const validHealthService =
-        serviceName === 'Identity'
-          ? healthService === 'identity'
-          : healthService === 'identity' || healthService === 'gateway';
+        service === 'gateway'
+          ? healthService === 'identity' || healthService === 'gateway'
+          : healthService === service;
       if (isRecord(healthBody) && healthBody.status === 'ok' && validHealthService) return;
 
       lastStatus = response.ok ? 502 : response.status;
-      lastFailureWasNetwork = false;
       if (!transientGatewayStatuses.has(lastStatus)) {
-        throw authResponseError(
-          lastStatus,
-          await readJsonBody(response),
-          `${serviceName} readiness`,
-        );
+        throw readinessError(service, lastStatus);
       }
       await response.body?.cancel();
     } catch (error) {
       if (error instanceof ApiClientError) throw error;
       lastStatus = undefined;
-      lastFailureWasNetwork = true;
     } finally {
       globalThis.clearTimeout(timeout);
     }
 
-    const delay = identityWakeRetryDelaysMs[attempt];
+    const delay = retryDelays[attempt];
     if (delay !== undefined) await wait(Math.min(delay, Math.max(0, deadline - Date.now())));
   }
 
-  if (lastStatus !== undefined)
-    throw new ApiClientError(
-      `${serviceName} chưa sẵn sàng sau khoảng 2 phút (HTTP ${lastStatus}). Hãy thử lại sau.`,
-      lastStatus,
-      'IDENTITY_NOT_READY',
-    );
-  throw new ApiClientError(
-    lastFailureWasNetwork
-      ? `Không thể kết nối tới ${serviceName} sau khoảng 2 phút.`
-      : `${serviceName} chưa sẵn sàng sau khoảng 2 phút.`,
-    0,
-    'IDENTITY_NOT_READY',
+  throw readinessError(service, lastStatus ?? 0);
+}
+
+function readinessError(service: ReadinessService, status: number): ApiClientError {
+  return new ApiClientError(
+    `Dịch vụ ${readinessLabels[service]} đang khởi động. Vui lòng chờ một chút rồi thử lại.`,
+    status,
+    'SERVICE_NOT_READY',
+  );
+}
+
+function servicesStartingError(status: number): ApiClientError {
+  return new ApiClientError(
+    'Một số dịch vụ đang khởi động. Vui lòng chờ một chút rồi thử lại.',
+    status,
+    'SERVICES_STARTING',
   );
 }
 
@@ -346,7 +437,7 @@ function gatewayReadinessUrl(): string {
   return `${apiBaseUrl.replace(/\/v1\/?$/, '')}/health`;
 }
 
-function readinessUrl(service: 'identity' | 'gateway'): string {
+function readinessUrl(service: ReadinessService): string {
   return `/api/readiness?service=${service}`;
 }
 
@@ -363,6 +454,7 @@ function authResponseError(
   value: unknown,
   context = 'Yêu cầu xác thực',
 ): ApiClientError {
+  if (transientGatewayStatuses.has(status)) return servicesStartingError(status);
   const body = isRecord(value) ? value : undefined;
   const code = typeof body?.code === 'string' ? body.code : undefined;
   const codeSuffix = code ? ` (${code})` : '';

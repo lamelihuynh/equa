@@ -33,6 +33,29 @@ describe('same-origin readiness route', () => {
     );
   });
 
+  it.each([
+    ['social', 'EQUA_SOCIAL_HEALTH_URL', 'https://social.example.test/health'],
+    ['ledger', 'EQUA_LEDGER_HEALTH_URL', 'https://ledger.example.test/health'],
+  ] as const)('probes the configured %s health URL', async (service, envName, healthUrl) => {
+    vi.stubEnv(envName, healthUrl);
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ status: 'ok', service }));
+    vi.stubGlobal('fetch', fetcher);
+
+    const response = await GET(
+      new Request(`https://web.example.test/api/readiness?service=${service}`),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ status: 'ok', service });
+    expect(response.headers.get('Cache-Control')).toContain('no-store');
+    expect(fetcher).toHaveBeenCalledWith(
+      healthUrl,
+      expect.objectContaining({ method: 'GET', cache: 'no-store' }),
+    );
+  });
+
   it('probes Gateway /health without exposing upstream HTML or errors', async () => {
     vi.stubEnv('EQUA_GATEWAY_URL', 'https://gateway.example.test');
     const fetcher = vi

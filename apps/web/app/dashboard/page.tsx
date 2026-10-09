@@ -76,7 +76,7 @@ export default function DashboardPage() {
   return (
     <main className="workspace">
       <section className="contentCard demoContent" role="status">
-        Đang tải tổng quan…
+        Đang khởi động dịch vụ và tải tổng quan…
       </section>
     </main>
   );
@@ -274,7 +274,7 @@ function DashboardView({
             <p>{groups.length} nhóm đang hoạt động</p>
             <h2>Tổng khoản chi active</h2>
             {loading ? (
-              <strong>Đang tải…</strong>
+              <strong>Đang khởi động dịch vụ…</strong>
             ) : (
               <strong>
                 {primaryTotal ? formatMinor(primaryTotal.totalMinor, primaryTotal.currency) : '0'}
@@ -337,7 +337,7 @@ function DashboardView({
             </div>
             <div className="activityList">
               {loading ? (
-                <p className="emptyState">Đang tải khoản chi…</p>
+                <p className="emptyState">Đang khởi động dịch vụ và tải khoản chi…</p>
               ) : orderedExpenses.length ? (
                 orderedExpenses.slice(0, 3).map((expense) => (
                   <article className="activityRow" key={expense.id}>

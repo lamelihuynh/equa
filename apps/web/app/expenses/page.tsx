@@ -752,7 +752,7 @@ function ApiExpensesPage() {
           <p>Tổng active theo bộ lọc</p>
           <h2>Đang theo dõi</h2>
           {loading ? (
-            <strong>Đang tải…</strong>
+            <strong>Đang khởi động dịch vụ…</strong>
           ) : (
             <strong>
               {totals.length
@@ -888,7 +888,7 @@ function ApiExpensesPage() {
             <fieldset className="participantShares">
               <legend>Người tham gia và phần chia</legend>
               {membersLoading ? (
-                <p className="emptyState">Đang tải thành viên nhóm…</p>
+                <p className="emptyState">Đang khởi động dịch vụ và tải thành viên nhóm…</p>
               ) : (
                 candidateIds.map((candidate) => (
                   <div className="participantShareRow" key={candidate}>
@@ -927,6 +927,9 @@ function ApiExpensesPage() {
       {error && (
         <p className="formMessage" role="alert">
           {error}
+          <button className="textAction" type="button" onClick={() => window.location.reload()}>
+            Thử lại
+          </button>
         </p>
       )}
       {message && (
@@ -943,7 +946,7 @@ function ApiExpensesPage() {
         </div>
         <div className="demoList">
           {loading ? (
-            <p className="emptyState">Đang tải khoản chi…</p>
+            <p className="emptyState">Đang khởi động dịch vụ và tải khoản chi…</p>
           ) : expenses.length ? (
             expenses.map((expense) => (
               <article className="demoRow expenseRow" key={expense.id}>

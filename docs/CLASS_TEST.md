@@ -1,6 +1,6 @@
 # Equa Class Test Guide
 
-**CLASS TEST DEPLOYMENT: READY WITH KNOWN RISKS**  
+**CLASS TEST DEPLOYMENT: NOT READY**  
 **PRODUCTION READINESS: NOT READY**
 
 ## Public links
@@ -25,6 +25,8 @@ Email verification, fresh password reset, and public login were manually confirm
 Use separate browser profiles if you test two accounts. Try the Friends, Groups, Expenses, Dashboard, and Profile pages. You may explore a friend request, an in-app group invitation, or a shared expense, but those public two-user flows and their balances/debt behavior were **NOT COMPLETED** in the final acceptance run. Report what you observe rather than assuming those flows passed.
 
 External group-invitation email is **NOT DEPLOYED/NOT VERIFIED** in the current staging topology. The full public friend/group/expense E2E is **NOT COMPLETED**. Render Free services can sleep and have limited quotas. Production is not ready.
+
+Authenticated Dashboard/Friends/Groups/Expenses pages currently have a known cold-start blocker: after login, Social/Ledger-backed requests were observed returning HTTP 502 while those services had no wake/request logs. Do not use this build for class testing until the product-service cold-start fix passes repeated public validation.
 
 ## Android
 

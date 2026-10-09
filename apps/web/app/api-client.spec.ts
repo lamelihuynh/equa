@@ -167,6 +167,126 @@ describe('Equa web API client', () => {
     ]);
   });
 
+  it.each([
+    ['groups', ['identity', 'social', 'gateway']],
+    ['groups/invitations', ['identity', 'social', 'gateway']],
+    ['friends/requests', ['identity', 'social', 'gateway']],
+    ['friends/friend-id/balance', ['identity', 'social', 'ledger', 'gateway']],
+    ['categories', ['identity', 'ledger', 'gateway']],
+    ['expenses', ['identity', 'ledger', 'gateway']],
+    ['expenses/total', ['identity', 'ledger', 'gateway']],
+  ] as const)(
+    'warms required services for %s before its Gateway API request',
+    async (path, services) => {
+      vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', '/v1');
+      vi.resetModules();
+      const { apiJson: hostedApiJson } = await import('./api-client.js');
+      stubBrowser();
+      const fetcher = vi.fn<typeof fetch>((input) => {
+        const url = requestUrl(input);
+        if (url.startsWith('/api/readiness?service=')) {
+          const service = url.split('=')[1] ?? '';
+          return Promise.resolve(Response.json({ status: 'ok', service }));
+        }
+        return Promise.resolve(Response.json([]));
+      });
+      vi.stubGlobal('fetch', fetcher);
+
+      await expect(hostedApiJson(path)).resolves.toEqual([]);
+
+      const readinessCalls = fetcher.mock.calls
+        .map(([input]) => requestUrl(input))
+        .filter((url) => url.startsWith('/api/readiness?service='));
+      expect(readinessCalls).toEqual(
+        services.map((service) => `/api/readiness?service=${service}`),
+      );
+      expect(fetcher.mock.calls.at(-1)?.[0]).toBe(`/v1/${path}`);
+    },
+  );
+
+  it('coalesces concurrent Social/Ledger readiness probes for Dashboard requests', async () => {
+    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', '/v1');
+    vi.resetModules();
+    const { apiJson: hostedApiJson } = await import('./api-client.js');
+    stubBrowser();
+    const fetcher = vi.fn<typeof fetch>((input) => {
+      const url = requestUrl(input);
+      if (url.startsWith('/api/readiness?service=')) {
+        const service = url.split('=')[1] ?? '';
+        return Promise.resolve(Response.json({ status: 'ok', service }));
+      }
+      return Promise.resolve(Response.json([]));
+    });
+    vi.stubGlobal('fetch', fetcher);
+
+    await Promise.all([
+      hostedApiJson('groups'),
+      hostedApiJson('expenses'),
+      hostedApiJson('expenses/total'),
+    ]);
+
+    const readinessCalls = fetcher.mock.calls
+      .map(([input]) => requestUrl(input))
+      .filter((url) => url.startsWith('/api/readiness?service='));
+    expect(readinessCalls.sort()).toEqual(
+      [
+        '/api/readiness?service=gateway',
+        '/api/readiness?service=identity',
+        '/api/readiness?service=ledger',
+        '/api/readiness?service=social',
+      ].sort(),
+    );
+  });
+
+  it('shows a friendly starting state and does not send product traffic after bounded readiness failure', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', '/v1');
+    vi.resetModules();
+    const { apiJson: hostedApiJson } = await import('./api-client.js');
+    stubBrowser();
+    const fetcher = vi.fn<typeof fetch>((input) => {
+      const url = requestUrl(input);
+      if (url === '/api/readiness?service=identity')
+        return Promise.resolve(Response.json({ status: 'ok', service: 'identity' }));
+      if (url === '/api/readiness?service=social')
+        return Promise.resolve(
+          Response.json({ status: 'starting', service: 'social' }, { status: 503 }),
+        );
+      return Promise.reject(new Error(`Unexpected smoke URL: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetcher);
+
+    const request = hostedApiJson('groups');
+    const requestAssertion = expect(request).rejects.toMatchObject({
+      status: 503,
+      code: 'SERVICE_NOT_READY',
+    });
+    await vi.advanceTimersByTimeAsync(190_000);
+    await requestAssertion;
+    expect(fetcher.mock.calls.some(([input]) => requestUrl(input) === '/v1/groups')).toBe(false);
+  });
+
+  it('maps Gateway HTML 502 responses to a friendly services-starting error', async () => {
+    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', '/v1');
+    vi.resetModules();
+    const { apiJson: hostedApiJson } = await import('./api-client.js');
+    stubBrowser();
+    const fetcher = vi.fn<typeof fetch>((input) => {
+      const url = requestUrl(input);
+      if (url.startsWith('/api/readiness?service=')) {
+        const service = url.split('=')[1] ?? '';
+        return Promise.resolve(Response.json({ status: 'ok', service }));
+      }
+      return Promise.resolve(new Response('<html>upstream unavailable</html>', { status: 502 }));
+    });
+    vi.stubGlobal('fetch', fetcher);
+
+    const error = await hostedApiJson('groups').catch((reason: unknown) => reason);
+    expect(error).toMatchObject({ status: 502, code: 'SERVICES_STARTING' });
+    expect(error).toBeInstanceOf(Error);
+    if (error instanceof Error) expect(error.message).not.toContain('upstream unavailable');
+  });
+
   it('checks local Gateway readiness before sending one auth POST', async () => {
     const fetcher = vi
       .fn<typeof fetch>()
@@ -262,7 +382,10 @@ describe('Equa web API client', () => {
     expect(caught).toBeInstanceOf(ApiClientError);
     if (caught instanceof ApiClientError) {
       expect(caught.status).toBe(502);
-      expect(caught.message).toContain('HTTP 502');
+      expect(caught.code).toBe('SERVICES_STARTING');
+      expect(caught.message).not.toContain('502');
+      expect(caught.message).not.toContain('upstream unavailable');
+      expect(caught.message).not.toContain('<html>');
     }
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls[0]?.[1]?.method).toBe('GET');

@@ -416,8 +416,8 @@ function ApiGroupDetailPage() {
 
   if (loading)
     return (
-      <DemoShell kicker="CHI TIẾT NHÓM" title="Đang tải…">
-        <p className="emptyState">Đang tải thông tin nhóm…</p>
+      <DemoShell kicker="CHI TIẾT NHÓM" title="Đang khởi động dịch vụ…">
+        <p className="emptyState">Đang khởi động dịch vụ và tải thông tin nhóm…</p>
       </DemoShell>
     );
   if (!group)
@@ -515,6 +515,9 @@ function ApiGroupDetailPage() {
       {error && (
         <p className="formMessage" role="alert">
           {error}
+          <button className="textAction" type="button" onClick={() => window.location.reload()}>
+            Thử lại
+          </button>
         </p>
       )}
       {message && (
