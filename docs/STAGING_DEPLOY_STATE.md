@@ -11,7 +11,7 @@ Updated: 2026-10-09. Scope: public class-test staging only. **CLASS TEST DEPLOYM
 
 ## Application deployment
 
-- Current `staging/demo` / `origin/staging/demo` SHA: `8573bb34c9a8c22c9afa7dae195e54c7e851d836`. The Social/Ledger readiness fix is an uncommitted candidate; the currently deployed Web still requires a post-push deployment SHA check.
+- Local `staging/demo` candidate: `80a0976` (`fix(web): wake Social and Ledger before product requests`), committed but not pushed. `origin/staging/demo` remains at `8573bb34c9a8c22c9afa7dae195e54c7e851d836`; the deployed Web is still the previous release.
 - Vercel project: `equa-staging-demo-web`, Hobby plan, root directory `apps/web`.
 - Vercel's existing production environment contains the correct non-secret Social and Ledger health URLs, alongside Gateway and Identity. The new build/deployment has not yet run.
 - Render services remain Free. Earlier LIVE/deploy evidence and GitHub CI `37910030413` / Security/CodeQL `37910029964` PASS apply to the previous committed release only.
@@ -26,9 +26,9 @@ Updated: 2026-10-09. Scope: public class-test staging only. **CLASS TEST DEPLOYM
 
 ## Blocking authenticated product cold-start failure
 
-At approximately 2026-10-09 14:16 UTC, `POST /v1/auth/login` and `GET /v1/profile/me` returned HTTP 200. Subsequent `GET /v1/groups`, `/v1/expenses`, `/v1/expenses/total`, `/v1/groups/invitations`, `/v1/friends`, `/v1/friends/requests`, and `/v1/categories` returned HTTP 502. Social and Ledger had no corresponding request or startup logs. The current same-origin readiness probes cover auth services only, so product requests still encounter sleeping upstreams.
+At approximately 2026-10-09 14:16 UTC, `POST /v1/auth/login` and `GET /v1/profile/me` returned HTTP 200. Subsequent `GET /v1/groups`, `/v1/expenses`, `/v1/expenses/total`, `/v1/groups/invitations`, `/v1/friends`, `/v1/friends/requests`, and `/v1/categories` returned HTTP 502. Social and Ledger had no corresponding request or startup logs. The then-deployed same-origin readiness probes covered auth services only, so product requests reached sleeping upstreams.
 
-The local Web candidate now probes the required Identity, Social, Ledger, and Gateway services through the same-origin Next.js readiness route before product requests; normal API calls still route through Kong. Automation is omitted because none of these Web flows currently calls it. Local validation is 41/41 Web tests, typecheck, lint, targeted Prettier, local build, Vercel-mode build, and `git diff --check`: all PASS. The candidate is not committed or deployed yet. Two authenticated cold product cycles are **NOT RUN**.
+The Web candidate probes the required Identity, Social, Ledger, and Gateway services through the same-origin Next.js readiness route before product requests; normal API calls still route through Kong. Automation is omitted because none of these Web flows currently calls it. Local validation is 41/41 Web tests, typecheck, lint, targeted Prettier, local build, Vercel-mode build, and `git diff --check`: all PASS. Commit `80a0976` is committed locally but not pushed or deployed. Two authenticated cold product cycles are **NOT RUN**.
 
 ## Forgot-password email report
 
@@ -47,6 +47,6 @@ The Vercel project deployment uses Vercel's `production` target internally becau
 
 ## Exact next action
 
-Commit/push only the intentional Social/Ledger readiness fix and checkpoint documentation to `staging/demo`, then verify CI/Security and deploy the pushed SHA to the authorized Vercel project. Do not manually warm Render. After the services naturally sleep, perform two public authenticated product cold-start cycles, correlating Vercel readiness logs and Render Social/Ledger startup/request logs. Keep class-test status NOT READY unless both cycles pass.
+Push `staging/demo` normally, then verify CI/Security and deploy the pushed SHA to the authorized Vercel project. Do not manually warm Render. After the services naturally sleep, perform two public authenticated product cold-start cycles, correlating Vercel readiness logs and Render Social/Ledger startup/request logs. Keep class-test status NOT READY unless both cycles pass.
 
 An unrelated GitHub status context named `Vercel` remains failed for the separate `equa-web-staging` project in an inaccessible `equa1` scope. That project was not changed. The existing authorized staging deployment is the previous committed release and must be checked again after candidate deployment.
