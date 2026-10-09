@@ -24,18 +24,27 @@ function stubBrowser(token = 'old-token'): Map<string, string> {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.resetModules();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
 
 describe('Equa web API client', () => {
-  it('wakes Render directly using the public Gateway health URL when configured', async () => {
-    const healthUrl = 'https://equa-staging-demo-gateway.onrender.com/health';
-    vi.stubEnv('NEXT_PUBLIC_GATEWAY_HEALTH_URL', healthUrl);
+  it('uses same-origin server readiness routes before an auth mutation in staging', async () => {
+    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', '/v1');
+    vi.resetModules();
+    const { apiBaseUrl: hostedApiBaseUrl, authJson: hostedAuthJson } =
+      await import('./api-client.js');
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
         new Response('{"status":"ok","service":"identity"}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response('{"status":"ok","service":"gateway"}', {
           status: 200,
           headers: { 'content-type': 'application/json' },
         }),
@@ -49,26 +58,31 @@ describe('Equa web API client', () => {
     vi.stubGlobal('fetch', fetcher);
 
     await expect(
-      authJson('auth/login', { email: 'test@example.com', password: 'password' }),
+      hostedAuthJson('auth/login', { email: 'test@example.com', password: 'password' }),
     ).resolves.toEqual({
       accessToken: 'fresh-token',
     });
 
-    const [healthUrlSent, healthInit] = fetcher.mock.calls[0] ?? [];
-    expect(healthUrlSent).toBe(healthUrl);
-    expect(healthInit?.method).toBe('GET');
-    expect(healthInit?.cache).toBe('no-store');
-    expect(fetcher.mock.calls[1]?.[1]?.method).toBe('POST');
+    expect(hostedApiBaseUrl).toBe('/v1');
+    expect(fetcher.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+      ['/api/readiness?service=identity', 'GET'],
+      ['/api/readiness?service=gateway', 'GET'],
+      ['/v1/auth/login', 'POST'],
+    ]);
   });
 
-  it('wakes Identity directly before Gateway and sends only one auth mutation', async () => {
+  it('retries same-origin Identity readiness before Gateway and sends one auth mutation', async () => {
     vi.useFakeTimers();
-    const identityUrl = 'https://equa-staging-demo-identity.onrender.com/health';
-    const gatewayUrl = 'https://equa-staging-demo-gateway.onrender.com/health';
-    vi.stubEnv('NEXT_PUBLIC_IDENTITY_HEALTH_URL', identityUrl);
-    vi.stubEnv('NEXT_PUBLIC_GATEWAY_HEALTH_URL', gatewayUrl);
+    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', '/v1');
+    vi.resetModules();
+    const { authJson: hostedAuthJson } = await import('./api-client.js');
     const healthResponse = () =>
       new Response('{"status":"ok","service":"identity"}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    const gatewayHealthResponse = () =>
+      new Response('{"status":"ok","service":"gateway"}', {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -76,7 +90,7 @@ describe('Equa web API client', () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(new Response('<html>starting</html>', { status: 502 }))
       .mockResolvedValueOnce(healthResponse())
-      .mockResolvedValueOnce(healthResponse())
+      .mockResolvedValueOnce(gatewayHealthResponse())
       .mockResolvedValueOnce(
         new Response('{"accepted":true}', {
           status: 202,
@@ -85,19 +99,75 @@ describe('Equa web API client', () => {
       );
     vi.stubGlobal('fetch', fetcher);
 
-    const request = authJson('auth/forgot-password', { email: 'test@example.com' });
+    const request = hostedAuthJson('auth/forgot-password', { email: 'test@example.com' });
     await vi.advanceTimersByTimeAsync(2_000);
     await expect(request).resolves.toEqual({ accepted: true });
 
     expect(fetcher.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
-      [identityUrl, 'GET'],
-      [identityUrl, 'GET'],
-      [gatewayUrl, 'GET'],
-      [`${apiBaseUrl}/auth/forgot-password`, 'POST'],
+      ['/api/readiness?service=identity', 'GET'],
+      ['/api/readiness?service=identity', 'GET'],
+      ['/api/readiness?service=gateway', 'GET'],
+      ['/v1/auth/forgot-password', 'POST'],
     ]);
   });
 
-  it('wakes Identity through the Gateway before sending one auth POST', async () => {
+  it('keeps the same-origin wake probe open through a Render cold start before retrying', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', '/v1');
+    vi.resetModules();
+    const { authJson: hostedAuthJson } = await import('./api-client.js');
+    let timedOut = false;
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(
+        (_input, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              'abort',
+              () => {
+                timedOut = true;
+                reject(new DOMException('Aborted', 'AbortError'));
+              },
+              { once: true },
+            );
+          }),
+      )
+      .mockResolvedValueOnce(
+        new Response('{"status":"ok","service":"identity"}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response('{"status":"ok","service":"gateway"}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response('{"accepted":true}', {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetcher);
+
+    const request = hostedAuthJson('auth/forgot-password', { email: 'test@example.com' });
+    await vi.advanceTimersByTimeAsync(55_999);
+    expect(timedOut).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(timedOut).toBe(true);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await expect(request).resolves.toEqual({ accepted: true });
+    expect(fetcher.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+      ['/api/readiness?service=identity', 'GET'],
+      ['/api/readiness?service=identity', 'GET'],
+      ['/api/readiness?service=gateway', 'GET'],
+      ['/v1/auth/forgot-password', 'POST'],
+    ]);
+  });
+
+  it('checks local Gateway readiness before sending one auth POST', async () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(

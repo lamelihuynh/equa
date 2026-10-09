@@ -34,14 +34,6 @@ if (process.env.VERCEL) {
 
 const nextConfig: NextConfig = {
   ...(process.env.VERCEL ? {} : { output: 'standalone' }),
-  ...(process.env.VERCEL && gatewayUrl && identityHealthUrl
-    ? {
-        env: {
-          NEXT_PUBLIC_GATEWAY_HEALTH_URL: `${gatewayUrl}/health`,
-          NEXT_PUBLIC_IDENTITY_HEALTH_URL: identityHealthUrl,
-        },
-      }
-    : {}),
   ...(process.env.VERCEL
     ? {
         rewrites() {

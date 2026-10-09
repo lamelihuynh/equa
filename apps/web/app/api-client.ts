@@ -8,6 +8,7 @@ export const apiBaseUrl = (
 const identityWakeRetryDelaysMs = [
   2_000, 4_000, 8_000, 16_000, 20_000, 20_000, 20_000, 20_000, 20_000,
 ] as const;
+const readinessRequestTimeoutMs = 56_000;
 const transientGatewayStatuses = new Set([502, 503, 504]);
 const identityWakeBudgetMs = identityWakeRetryDelaysMs.reduce((total, delay) => total + delay, 0);
 
@@ -31,7 +32,7 @@ export class SessionExpiredError extends ApiClientError {
   }
 }
 
-/** Wakes Identity safely through the Gateway before sending an auth mutation exactly once. */
+/** Wakes staging services through same-origin server probes before one auth mutation. */
 export async function authJson(path: string, payload: unknown): Promise<unknown> {
   const serialized = JSON.stringify(payload);
   if (serialized === undefined)
@@ -264,8 +265,11 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 async function waitForIdentityThroughGateway(): Promise<void> {
   const deadline = Date.now() + identityWakeBudgetMs;
-  const identityHealthUrl = process.env.NEXT_PUBLIC_IDENTITY_HEALTH_URL;
-  if (identityHealthUrl) await waitForReadiness(identityHealthUrl, 'Identity', deadline);
+  if (apiBaseUrl === '/v1') {
+    await waitForReadiness(readinessUrl('identity'), 'Identity', deadline);
+    await waitForReadiness(readinessUrl('gateway'), 'Gateway', deadline);
+    return;
+  }
   await waitForReadiness(gatewayReadinessUrl(), 'Gateway', deadline);
 }
 
@@ -282,7 +286,10 @@ async function waitForReadiness(
     if (remaining <= 0) break;
 
     const controller = new AbortController();
-    const timeout = globalThis.setTimeout(() => controller.abort(), Math.min(8_000, remaining));
+    const timeout = globalThis.setTimeout(
+      () => controller.abort(),
+      Math.min(readinessRequestTimeoutMs, remaining),
+    );
     try {
       const response = await fetch(readyUrl, {
         method: 'GET',
@@ -291,8 +298,12 @@ async function waitForReadiness(
       });
 
       const healthBody = response.ok ? await readJsonBody(response) : undefined;
-      if (isRecord(healthBody) && healthBody.status === 'ok' && healthBody.service === 'identity')
-        return;
+      const healthService = isRecord(healthBody) ? healthBody.service : undefined;
+      const validHealthService =
+        serviceName === 'Identity'
+          ? healthService === 'identity'
+          : healthService === 'identity' || healthService === 'gateway';
+      if (isRecord(healthBody) && healthBody.status === 'ok' && validHealthService) return;
 
       lastStatus = response.ok ? 502 : response.status;
       lastFailureWasNetwork = false;
@@ -332,10 +343,11 @@ async function waitForReadiness(
 }
 
 function gatewayReadinessUrl(): string {
-  const directGatewayHealthUrl = process.env.NEXT_PUBLIC_GATEWAY_HEALTH_URL;
-  if (directGatewayHealthUrl) return directGatewayHealthUrl;
-  if (apiBaseUrl === '/v1') return `${apiBaseUrl}/auth/_ready`;
   return `${apiBaseUrl.replace(/\/v1\/?$/, '')}/health`;
+}
+
+function readinessUrl(service: 'identity' | 'gateway'): string {
+  return `/api/readiness?service=${service}`;
 }
 
 async function readJsonBody(response: Response): Promise<unknown> {
