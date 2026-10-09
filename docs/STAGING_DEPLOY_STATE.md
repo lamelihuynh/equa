@@ -15,6 +15,7 @@ Updated: 2026-10-09. Scope: public class-test staging only. **CLASS TEST DEPLOYM
 - Vercel project: `equa-staging-demo-web`, Hobby plan, root directory `apps/web`.
 - Vercel's existing production environment contains the correct non-secret Social and Ledger health URLs, alongside Gateway and Identity. The new build/deployment has not yet run.
 - Render services remain Free. Earlier LIVE/deploy evidence and GitHub CI `37910030413` / Security/CodeQL `37910029964` PASS apply to the previous committed release only.
+- First GitHub CI run for this change (`37952480138`, commit `ad92b12`) failed only the repository-wide Prettier check on `docs/CLASS_TEST_VALIDATION.md`; that file is now formatted locally. Security run `37952479715` was in progress at last check. Fresh statuses are pending after the correction push.
 
 ## Smoke evidence
 
@@ -47,6 +48,6 @@ The Vercel project deployment uses Vercel's `production` target internally becau
 
 ## Exact next action
 
-Verify CI/Security and confirm the authorized Vercel project deploys the pushed SHA. Do not manually warm Render. After the services naturally sleep, perform two public authenticated product cold-start cycles, correlating Vercel readiness logs and Render Social/Ledger startup/request logs. Keep class-test status NOT READY unless both cycles pass.
+Commit/push the targeted Prettier correction and checkpoint update, then verify fresh CI/Security and confirm the authorized Vercel project deploys the pushed SHA. Do not manually warm Render. After the services naturally sleep, perform two public authenticated product cold-start cycles, correlating Vercel readiness logs and Render Social/Ledger startup/request logs. Keep class-test status NOT READY unless both cycles pass.
 
 An unrelated GitHub status context named `Vercel` remains failed for the separate `equa-web-staging` project in an inaccessible `equa1` scope. That project was not changed. The existing authorized staging deployment is the previous committed release and must be checked again after candidate deployment.
