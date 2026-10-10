@@ -1,6 +1,6 @@
 # Staging Deployment State
 
-Updated: 2026-10-10. Scope: public class-test staging only. **CLASS TEST DEPLOYMENT: NOT READY. PRODUCTION READINESS: NOT READY.**
+Updated: 2026-10-10. Scope: public class-test staging only. **CLASS TEST DEPLOYMENT: READY WITH KNOWN RISKS. PRODUCTION READINESS: NOT READY.**
 
 ## Public URLs
 
@@ -31,7 +31,7 @@ Updated: 2026-10-10. Scope: public class-test staging only. **CLASS TEST DEPLOYM
 
 At approximately 2026-10-09 14:16 UTC, `POST /v1/auth/login` and `GET /v1/profile/me` returned HTTP 200. Subsequent `GET /v1/groups`, `/v1/expenses`, `/v1/expenses/total`, `/v1/groups/invitations`, `/v1/friends`, `/v1/friends/requests`, and `/v1/categories` returned HTTP 502. Social and Ledger had no corresponding request or startup logs. The then-deployed same-origin readiness probes covered auth services only, so product requests reached sleeping upstreams.
 
-The Web candidate probes required services through the same-origin readiness route; normal API calls remain behind Kong. Tests 41/41, typecheck, lint, local build, and Vercel-equivalent Turbo build pass. Cold cycle 2 passed for login, profile, groups, expenses, and expenses total; the authenticated Friends-page UI check remains unverified.
+The Web candidate probes required services through the same-origin readiness route; normal API calls remain behind Kong. Tests 41/41, typecheck, lint, local build, and Vercel-equivalent Turbo build pass. Cold cycle 2 passed for login, profile, groups, expenses, and expenses total. The user confirmed the authenticated Friends page loaded normally without a 502.
 
 ## Forgot-password email report
 
@@ -60,6 +60,6 @@ The Vercel project deployment uses Vercel's `production` target internally becau
 
 ## Exact next action
 
-Cold cycle 2 passed for login-to-Dashboard server behavior; minimal public root/Gateway/Identity smoke also returned 200. The final docs checkpoint is pushed, CI/Security are green, and Render/Vercel revisions are verified. The authenticated Friends-page UI result remains unverified unless the user-held browser check is confirmed.
+Cold cycle 2 and the user-confirmed Friends-page check passed; minimal public root/Gateway/Identity smoke also returned 200. Commit/push this final documentation update, wait for CI/Security, and verify provider revisions. Keep the full two-user E2E marked NOT COMPLETED and production NOT READY.
 
 An unrelated GitHub status context named `Vercel` remains failed for the separate `equa-web-staging` project in an inaccessible `equa1` scope. That project was not changed. The authorized `equa-staging-demo-web` deployment is READY from committed SHA `342c6af3e3363512aa1b61aeae9396dd304f59df`.

@@ -1,6 +1,6 @@
 # Equa Class Test Guide
 
-**CLASS TEST DEPLOYMENT: NOT READY**  
+**CLASS TEST DEPLOYMENT: READY WITH KNOWN RISKS**  
 **PRODUCTION READINESS: NOT READY**
 
 ## Public links
@@ -26,9 +26,9 @@ Use separate browser profiles if you test two accounts. Try the Friends, Groups,
 
 External group-invitation email is **NOT DEPLOYED/NOT VERIFIED** in the current staging topology. The full public friend/group/expense E2E is **NOT COMPLETED**. Render Free services can sleep and have limited quotas. The current Free Postgres instance expires on 2026-11-05; staging data may not persist beyond that date. Production is not ready.
 
-The Web cold-start fix is deployed. Cycle 1 was partial because a pre-login Dashboard batch returned 502. Clean cycle 2 passed at the API/log level: Account A login/profile succeeded, readiness brought Identity, Gateway, Social, and Ledger up, and groups/expenses/total returned 200 with no Gateway 5xx after login. The authenticated Friends-page check remains unverified; do not infer its UI result from the Groups request.
+The Web cold-start fix is deployed. Cycle 1 was partial because a pre-login Dashboard batch returned 502. Clean cycle 2 passed at the API/log level: Account A login/profile succeeded, readiness brought Identity, Gateway, Social, and Ledger up, and groups/expenses/total returned 200 with no Gateway 5xx after login. Account A's Friends page was subsequently confirmed to load normally without a 502.
 
-The checkpoint documentation is committed and pushed. CI and Security/CodeQL passed on the documentation checkpoint. A post-rollout public smoke returned HTTP 200 for the Web root, Gateway health, and Identity health. The authenticated Friends-page check is the only remaining minimal UI check; keep its result unverified until observed.
+The checkpoint documentation is committed and pushed. CI and Security/CodeQL passed on the documentation checkpoint. A post-rollout public smoke returned HTTP 200 for the Web root, Gateway health, and Identity health. The full two-user friend/group/expense E2E remains uncompleted by choice; production remains not ready.
 
 ## Android
 

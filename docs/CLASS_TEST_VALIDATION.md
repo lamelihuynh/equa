@@ -1,6 +1,6 @@
 # Equa Class Test Validation
 
-Updated: 2026-10-10. Target: public staging. **CLASS TEST DEPLOYMENT: NOT READY. PRODUCTION READINESS: NOT READY.**
+Updated: 2026-10-10. Target: public staging. **CLASS TEST DEPLOYMENT: READY WITH KNOWN RISKS. PRODUCTION READINESS: NOT READY.**
 
 ## Acceptance status
 
@@ -12,13 +12,13 @@ Updated: 2026-10-10. Target: public staging. **CLASS TEST DEPLOYMENT: NOT READY.
 | Auth-service cold readiness     | PASS, repeated twice          | Two independent idle-to-wake cycles passed for Identity and Gateway. Cycle 2 also exercised the product readiness probes for Social and Ledger.                                                                                                           |
 | Auth-only public smoke          | PASS                          | Web root/login form 200; Gateway and Identity health 200; synthetic public login returned expected 401 `AUTH_INVALID_CREDENTIALS`.                                                                                                                        |
 | Post-fix Web root smoke         | PASS                          | Public Vercel root returned HTTP 200 and rendered the login form on deployment SHA `342c6af`; no authenticated API path was exercised.                                                                                                                    |
-| Minimal public acceptance       | PARTIAL                       | Web root/login, Gateway health, Identity health, authenticated profile, groups, expenses, and expenses total returned 200. Authenticated Friends page has not been checked in the signed-in browser.                                                      |
+| Minimal public acceptance       | PASS                          | Web root/login, Gateway health, Identity health, authenticated profile, groups, expenses, and expenses total returned 200. User confirmed Account A's authenticated Friends page loaded normally without a 502.                                           |
 | Previous cold product release   | FAIL                          | On 2026-10-09 around 14:16 UTC, groups, expenses, invitations, friends, and categories returned 502 with no Social/Ledger wake logs. This was before the current readiness deployment.                                                                    |
 | Social/Ledger readiness code    | PASS (public cycle 2)         | Vercel same-origin readiness retries recovered after initial timeouts; Render logs show Social and Ledger started, became ready, and served their Dashboard routes through Kong.                                                                          |
 | Web candidate validation        | PASS (local/CI)               | 41/41 tests, typecheck, lint, local/Vercel-equivalent Turbo builds pass. CI `37954115482` and Security `37954114895` pass on app SHA `342c6af`; final docs commit checks also pass. Vercel deployment `dpl_47WBBXP1JgrNtoLE57Ay5MnmsPu6` is READY.        |
 | Natural idle evidence           | PASS (Social/Ledger/Identity) | SIGTERM was logged after idle for Social, Ledger, and Identity. No product requests occurred between cycle 1 and cycle 2 before Account A's clean login. Gateway showed no separate SIGTERM marker.                                                       |
 | Public product cold cycles      | PASS (cycle 2)                | Fresh journey: login 200 at 06:20:03 UTC, profile 200 at 06:20:04, readiness recovered for Ledger/Social, then expenses/total and expenses 200 at 06:21:29–30 and groups 200 at 06:21:49. No pre-login product calls or Gateway 5xx; cycle 1 was partial. |
-| Authenticated Friends page      | NOT RUN                       | No shared authenticated browser session was available for UI inspection; Social readiness is proven by the successful Groups API request, not by a Friends-page render.                                                                                   |
+| Authenticated Friends page      | PASS (user-confirmed)         | User reported the signed-in Friends page loaded normally with no 502.                                                                                                                                                                                     |
 | Forgot-password inbox report    | UNVERIFIED                    | Identity's anti-enumeration 202 is expected for absent/non-active accounts; tested email not identified. Read-only status query was blocked by database IP allowlist.                                                                                     |
 | Public friend/group/expense E2E | NOT COMPLETED                 | User explicitly accepted this staging risk. Friend requests, invitations, shared expenses, balances, debt guard, edit/delete, and cross-account dashboard/profile behavior were not exercised.                                                            |
 | Group-invitation email          | NOT DEPLOYED/NOT VERIFIED     | In-app state remains Social-owned; external email delivery is not proven in this topology.                                                                                                                                                                |
@@ -48,4 +48,4 @@ The reported forgot-password request returned 202. Identity intentionally gives 
 
 ## Exact next action
 
-Exact next action: record the authenticated Friends-page result if the user can confirm it; do not run another cold cycle or full two-user E2E. Cycle 1 remains partial and cycle 2 passed. Keep class-test deployment NOT READY until that minimal UI check is confirmed.
+Exact next action: commit/push this final documentation update, verify CI/Security and provider revisions, then hand off the class-test links. Cycle 1 remains partial and cycle 2 passed; do not run another cold cycle or the full two-user E2E. Production remains NOT READY.
