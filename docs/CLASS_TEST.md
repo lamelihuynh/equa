@@ -16,7 +16,7 @@
 1. Open the Web link and use the public app. Do not select **Local Demo**; it stores data only in the browser.
 2. To register, use an email inbox you can access, create an account, then open the verification email and follow its link.
 3. Sign in with your account. If you forget the password, choose **Quen mat khau?** and use the newest reset email. Do not share passwords or reset links.
-4. After a long idle period, Render Free services may be asleep. Allow several minutes for the first authenticated action. The two measured sequential cold-readiness cycles completed in about 2-4 minutes from the first wake probe; this is staging evidence, not a guaranteed upper bound. If the page reports a temporary connection error, wait briefly and retry once.
+4. After a long idle period, Render Free services may be asleep. Allow around 1–2 minutes for the first authenticated Dashboard load while services start; actual timing varies. Leave the page open while the startup message is shown instead of repeatedly reloading or opening Render health URLs.
 
 Email verification, fresh password reset, and public login were manually confirmed for the two existing staging accounts. No replacement accounts were created for this finalization.
 
@@ -24,9 +24,9 @@ Email verification, fresh password reset, and public login were manually confirm
 
 Use separate browser profiles if you test two accounts. Try the Friends, Groups, Expenses, Dashboard, and Profile pages. You may explore a friend request, an in-app group invitation, or a shared expense, but those public two-user flows and their balances/debt behavior were **NOT COMPLETED** in the final acceptance run. Report what you observe rather than assuming those flows passed.
 
-External group-invitation email is **NOT DEPLOYED/NOT VERIFIED** in the current staging topology. The full public friend/group/expense E2E is **NOT COMPLETED**. Render Free services can sleep and have limited quotas. Production is not ready.
+External group-invitation email is **NOT DEPLOYED/NOT VERIFIED** in the current staging topology. The full public friend/group/expense E2E is **NOT COMPLETED**. Render Free services can sleep and have limited quotas. The current Free Postgres instance expires on 2026-11-05; staging data may not persist beyond that date. Production is not ready.
 
-Authenticated Dashboard/Friends/Groups/Expenses pages currently have a known cold-start blocker: after login, Social/Ledger-backed requests were observed returning HTTP 502 while those services had no wake/request logs. Do not use this build for class testing until the product-service cold-start fix passes repeated public validation.
+The Web cold-start fix is deployed. Cycle 1 was partial because a pre-login Dashboard batch returned 502. Clean cycle 2 passed at the API/log level: Account A login/profile succeeded, readiness brought Identity, Gateway, Social, and Ledger up, and groups/expenses/total returned 200 with no Gateway 5xx after login. The authenticated Friends-page check remains unverified; do not infer its UI result from the Groups request.
 
 ## Android
 
