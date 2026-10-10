@@ -11,11 +11,11 @@ Updated: 2026-10-10. Scope: public class-test staging only. **CLASS TEST DEPLOYM
 
 ## Application deployment
 
-- Product fix `80a0976`, Turbo fix `a24bcb3`, and checkpoint commit `342c6af` are pushed; remote tip is `342c6af3e3363512aa1b61aeae9396dd304f59df`.
+- Product fix `80a0976` and Turbo fix `a24bcb3` are deployed from application commit `342c6af`. Subsequent staging/demo commits updated checkpoint documentation only.
 - Vercel project: `equa-staging-demo-web`, Hobby plan, root directory `apps/web`.
 - Vercel deployment `dpl_47WBBXP1JgrNtoLE57Ay5MnmsPu6` is READY from exact SHA `342c6af3e3363512aa1b61aeae9396dd304f59df`; stable alias `https://equa-staging-demo-web.vercel.app` is assigned.
-- Render services remain Free. Identity, Social, Ledger, and Automation auto-deployed the same branch SHA between 15:45 and 15:47 UTC; Gateway remains on its prior live deployment. No backend source files changed. The cold-start idle timer restarted after those deployments.
-- CI `37954115482` and Security `37954114895` both PASS on `342c6af`. The `Deploy staging` GitHub workflow skips `staging/demo` by design.
+- Render services remain Free and all five services are LIVE after docs-only rollouts. No backend source files changed after application SHA `342c6af`.
+- CI `37954115482` and Security `37954114895` both PASS on application SHA `342c6af`; docs commit CI `38032003567` and Security `38032003352` also PASS on `12e9b27`. The `Deploy staging` GitHub workflow skips `staging/demo` by design.
 
 ## Smoke evidence
 
@@ -24,6 +24,7 @@ Updated: 2026-10-10. Scope: public class-test staging only. **CLASS TEST DEPLOYM
 - Identity `/health`: HTTP 200, `status=ok`.
 - Public synthetic login for a non-existent `.invalid` email: HTTP 401 `AUTH_INVALID_CREDENTIALS` (expected application response).
 - After the new Vercel deployment, a read-only public root fetch at 15:52 UTC returned HTTP 200 and rendered the login form; this did not execute browser JavaScript or touch APIs.
+- After the final docs-only Render rollout, public Web root, Gateway `/health`, and Identity `/health` each returned HTTP 200.
 - Earlier minimal smoke of Web root/login and service health passed; later authenticated product navigation exposed the cold-service blocker below.
 
 ## Previous authenticated product cold-start failure (resolved)
@@ -40,8 +41,8 @@ The Vercel project deployment uses Vercel's `production` target internally becau
 
 ## Latest checkpoint (2026-10-10)
 
-- Product fix `80a0976`, Turbo fix `a24bcb3`, and checkpoint commit `342c6af` are pushed; remote tip is `342c6af3e3363512aa1b61aeae9396dd304f59df`.
-- CI `37954115482` and Security `37954114895` both PASS on `342c6af`; the staging deploy workflow skips this branch by design.
+- Product fix `80a0976` and Turbo fix `a24bcb3` remain the deployed application changes at `342c6af`; subsequent commits changed checkpoint docs only.
+- CI `37954115482` and Security `37954114895` pass on application SHA `342c6af`; CI `38032003567` and Security `38032003352` pass on docs SHA `12e9b27`. The staging deploy workflow skips this branch by design.
 - Previous deployment `dpl_8mN6yZeLbRE1VG4fvVJXdSKJkefP` failed on the prior SHA because Turbo omitted the Social/Ledger health vars; deployment `dpl_47WBBXP1JgrNtoLE57Ay5MnmsPu6` is now READY from `342c6af3e3363512aa1b61aeae9396dd304f59df`.
 - Natural idle evidence: Render logs show SIGTERM for Social at 16:02:29 UTC, Ledger at 16:02:26 UTC, and Identity at 16:02:28 UTC after the 15:47 deploys. No probe or product request was issued during this idle window. Gateway had no matching SIGTERM log in the queried window.
 - Cycle 1 was partial: login and later Dashboard data succeeded, but a pre-login Dashboard batch returned 502.
@@ -59,6 +60,6 @@ The Vercel project deployment uses Vercel's `production` target internally becau
 
 ## Exact next action
 
-Cold cycle 2 passed for login-to-Dashboard server behavior; minimal public root/Gateway/Identity smoke also returned 200. Commit/push only the checkpoint docs, then wait for CI/Security and verify final Vercel/Render revisions. Keep the Friends-page UI unverified unless a user-held browser result is available.
+Cold cycle 2 passed for login-to-Dashboard server behavior; minimal public root/Gateway/Identity smoke also returned 200. The final docs checkpoint is pushed, CI/Security are green, and Render/Vercel revisions are verified. The authenticated Friends-page UI result remains unverified unless the user-held browser check is confirmed.
 
 An unrelated GitHub status context named `Vercel` remains failed for the separate `equa-web-staging` project in an inaccessible `equa1` scope. That project was not changed. The authorized `equa-staging-demo-web` deployment is READY from committed SHA `342c6af3e3363512aa1b61aeae9396dd304f59df`.

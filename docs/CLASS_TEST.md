@@ -28,6 +28,8 @@ External group-invitation email is **NOT DEPLOYED/NOT VERIFIED** in the current 
 
 The Web cold-start fix is deployed. Cycle 1 was partial because a pre-login Dashboard batch returned 502. Clean cycle 2 passed at the API/log level: Account A login/profile succeeded, readiness brought Identity, Gateway, Social, and Ledger up, and groups/expenses/total returned 200 with no Gateway 5xx after login. The authenticated Friends-page check remains unverified; do not infer its UI result from the Groups request.
 
+The checkpoint documentation is committed and pushed. CI and Security/CodeQL passed on the documentation checkpoint. A post-rollout public smoke returned HTTP 200 for the Web root, Gateway health, and Identity health. The authenticated Friends-page check is the only remaining minimal UI check; keep its result unverified until observed.
+
 ## Android
 
 Download and install the APK on Android, then sign in with your own verified staging account. Automated Mobile evidence is 53/53 tests with typecheck, lint, and build passing. Native installation/device validation is **NOT RUN**; offline restart/reconnect behavior is also not verified on a device.

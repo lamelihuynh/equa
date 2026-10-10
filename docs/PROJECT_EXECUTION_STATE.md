@@ -6,9 +6,9 @@ Updated: 2026-10-10. Canonical checkpoint for the public staging class-test buil
 
 - Verdict: **CLASS TEST DEPLOYMENT: NOT READY**.
 - Production: **NOT READY**.
-- Product fix `80a0976`, Turbo fix `a24bcb3`, and checkpoint commit `342c6af` are pushed; remote tip is `342c6af3e3363512aa1b61aeae9396dd304f59df`.
+- Product fix `80a0976` and Turbo fix `a24bcb3` are deployed from application commit `342c6af`. Documentation-only checkpoint updates are pushed to `staging/demo`; CI/Security passed on the first checkpoint update.
 - The authorized Vercel project is `equa-staging-demo-web`; deployment `dpl_47WBBXP1JgrNtoLE57Ay5MnmsPu6` is READY from exact SHA `342c6af3e3363512aa1b61aeae9396dd304f59df`, with stable alias `https://equa-staging-demo-web.vercel.app`. A read-only fetch of the public root at 15:52 UTC returned HTTP 200 with the login form rendered.
-- All Render services remain Free. Render auto-deployed Identity, Social, Ledger, and Automation from SHA `342c6af` after the branch push (deploys finished 15:47:26–15:47:29 UTC); no backend source files changed. Gateway remains at its prior live deployment on `8573bb3`.
+- All Render services remain Free and are LIVE after docs-only rollouts; no backend source files changed after validated application commit `342c6af`. Vercel remains READY from exact application SHA `342c6af`.
 - The original authenticated product cold flow failed on Social/Ledger. A clean second cycle completed on 2026-10-10; detailed provider evidence is below. The minimal Friends-page UI check remains unverified because the account session is user-held.
 
 ## Resolved cold-start finding
@@ -19,11 +19,11 @@ At approximately 2026-10-09 14:16 UTC, public login and `GET /v1/profile/me` ret
 
 - Web maps authenticated product requests to required services and performs same-origin readiness probes that call the configured public service health endpoints server-side. Normal product requests remain under `/v1` through Kong. Readiness has bounded retries, in-flight coalescing, short success caching, and friendly startup errors; Automation is not probed because the affected Web routes do not use it.
 - Vercel production env metadata confirms `EQUA_SOCIAL_HEALTH_URL` and `EQUA_LEDGER_HEALTH_URL` target the expected public HTTPS `/health` endpoints. Values are non-secret.
-- Web validation: tests 41/41 PASS; typecheck, lint, targeted Prettier, local production build, Vercel-equivalent Turbo build, and `git diff --check` PASS. CI `37954115482` and Security `37954114895` both PASS on `342c6af`.
+- Web validation: tests 41/41 PASS; typecheck, lint, targeted Prettier, local production build, Vercel-equivalent Turbo build, and `git diff --check` PASS. CI `37954115482` and Security `37954114895` pass on application SHA `342c6af`; final docs checkpoint CI `38032003567` and Security `38032003352` also PASS on `12e9b27`.
 - The repository's `Deploy staging` workflow deliberately skips branch `staging/demo`; it made no deployment. The old Vercel build failed on SHA `99bf5a9` because Turbo omitted the configured Social/Ledger health URLs. `turbo.json` now passes them and deployment `dpl_47WBBXP1JgrNtoLE57Ay5MnmsPu6` is READY on SHA `342c6af`.
 - Public cold cycle 1 (2026-10-09 UTC): login returned 200 at 18:41:56; readiness eventually returned ready and post-login profile/expenses/groups calls returned 200. A pre-login Dashboard batch returned 502, so cycle 1 is **PARTIAL**.
 - Public cold cycle 2 (2026-10-10 UTC) PASS for the login-to-Dashboard API path: Account A login 200 at 06:20:03; profile 200 at 06:20:04. Identity readiness recovered by 06:19:27 after one 54s timeout; Gateway was ready by 06:20:01. Ledger readiness recovered at 06:21:28 after a 54s timeout; expenses/total and expenses returned 200 at 06:21:29-30. Social readiness recovered at 06:21:47 after a 54s timeout; groups returned 200 at 06:21:49. There were no product/API requests before login and no Gateway 5xx afterward. The user stopped at Dashboard; Vercel readiness timeouts recovered inside the retry budget.
-- Minimal public smoke after cycle 2: Vercel root/login form 200; Gateway `/health` 200; Identity `/health` 200. Profile, groups, expenses, and expenses total returned 200 during the authenticated journey. The authenticated Friends-page UI remains untested because the agent has no access to Account A's browser session.
+- Minimal public smoke after the final Render rollout: Vercel root/login form 200; Gateway `/health` 200; Identity `/health` 200. Profile, groups, expenses, and expenses total returned 200 during cold cycle 2. The authenticated Friends-page UI remains untested because the agent has no access to Account A's browser session.
 - Natural-idle evidence between cycles: Identity/Social/Ledger logged SIGTERM at 18:57:41/51/44 UTC on Oct 9; no product requests appeared before cycle 2 at 06:20 UTC. Gateway had no SIGTERM marker, but its instance ID changed and its Vercel readiness probe took ~33s before returning 200. No health probes were sent by the agent before cycle 2.
 - Full public two-user friend/group/expense E2E remains **NOT COMPLETED**.
 - Forgot-password report: Identity intentionally returns 202 for both active and absent users. A safe read-only Postgres status lookup was blocked because the database rejects external connections with an empty IP allowlist; no networking setting was changed. The reported address was not identified in the available evidence, so active-account status and inbox delivery remain unverified. Do not change anti-enumeration behavior.
@@ -40,4 +40,4 @@ GitHub also reports a failing `Vercel` status context for a separate `equa-web-s
 
 ## Exact next action
 
-Commit/push only the four checkpoint docs, wait for CI/Security, and verify final Vercel/Render revisions. Do not run another cold cycle; cycle 2 passed. Keep the Friends UI marked NOT RUN unless the user confirms its authenticated browser result.
+Record the authenticated Friends-page result if the user confirms it; otherwise leave this check NOT RUN and the class-test verdict NOT READY. No more cold cycle or full two-user E2E is requested. The final pushed docs checkpoint has CI/Security green; Render services are live and Vercel remains on the validated app SHA.
