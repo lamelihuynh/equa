@@ -14,7 +14,11 @@ import {
 import { DemoShell } from '../components/demo-shell';
 import { humanIdentityLabel, humanIdentitySecondaryLabel } from '../identity-label';
 import { formatMinor } from '../money';
-import { FRIEND_LOOKUP_HELP_TEXT } from './lookup-copy';
+import {
+  FRIEND_EMAIL_VALIDATION_ERROR,
+  FRIEND_LOOKUP_HELP_TEXT,
+  isValidFriendEmailAddress,
+} from './lookup-copy';
 import {
   loadDemoState,
   newDemoId,
@@ -45,7 +49,6 @@ interface HumanIdentityDto {
   id?: string;
   displayName?: string;
   email?: string;
-  username?: string;
 }
 
 interface PairBalanceDto {
@@ -90,8 +93,8 @@ function LocalFriendsPage() {
   function sendRequest(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     const value = identifier.trim();
-    if (!value) {
-      setMessage('Nhập email hoặc username trước khi gửi lời mời.');
+    if (!isValidFriendEmailAddress(value)) {
+      setMessage(FRIEND_EMAIL_VALIDATION_ERROR);
       return;
     }
     if (state.friends.some((friend) => friend.identifier.toLowerCase() === value.toLowerCase())) {
@@ -145,14 +148,20 @@ function LocalFriendsPage() {
           </div>
           <form className="formStack compactForm" onSubmit={sendRequest}>
             <label>
-              Email hoặc username
+              Email
               <input
+                type="email"
                 value={identifier}
                 onChange={(event) => setIdentifier(event.target.value)}
                 placeholder="minh.anh@example.com"
+                required
+                autoComplete="email"
+                aria-describedby="friend-lookup-help"
               />
             </label>
-            <p className="fieldHint">{FRIEND_LOOKUP_HELP_TEXT}</p>
+            <p id="friend-lookup-help" className="fieldHint">
+              {FRIEND_LOOKUP_HELP_TEXT}
+            </p>
             <button className="primaryBtn" type="submit">
               Gửi lời mời
             </button>
@@ -304,8 +313,8 @@ function ApiFriendsPage() {
   function sendRequest(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     const value = identifier.trim();
-    if (!value) {
-      setError('Nhập email hoặc username trước khi gửi lời mời.');
+    if (!isValidFriendEmailAddress(value)) {
+      setError(FRIEND_EMAIL_VALIDATION_ERROR);
       return;
     }
     void runAction(
@@ -340,15 +349,20 @@ function ApiFriendsPage() {
           </div>
           <form className="formStack compactForm" onSubmit={sendRequest}>
             <label>
-              Email hoặc username
+              Email
               <input
+                type="email"
                 value={identifier}
                 onChange={(event) => setIdentifier(event.target.value)}
                 placeholder="minh.anh@example.com"
                 required
+                autoComplete="email"
+                aria-describedby="friend-lookup-help"
               />
             </label>
-            <p className="fieldHint">{FRIEND_LOOKUP_HELP_TEXT}</p>
+            <p id="friend-lookup-help" className="fieldHint">
+              {FRIEND_LOOKUP_HELP_TEXT}
+            </p>
             <button className="primaryBtn" type="submit" disabled={busy}>
               Gửi lời mời
             </button>
@@ -519,8 +533,7 @@ function isHumanIdentity(value: unknown): value is HumanIdentityDto {
     isRecord(value) &&
     (value.id === undefined || typeof value.id === 'string') &&
     (value.displayName === undefined || typeof value.displayName === 'string') &&
-    (value.email === undefined || typeof value.email === 'string') &&
-    (value.username === undefined || typeof value.username === 'string')
+    (value.email === undefined || typeof value.email === 'string')
   );
 }
 

@@ -31,7 +31,6 @@ const timezones = [
 type Profile = {
   id: string;
   email: string;
-  username: string | null;
   displayName: string;
   avatarKey: string | null;
   bio: string;
@@ -210,10 +209,6 @@ export default function ProfilePage() {
             <input name="displayName" defaultValue={profile.displayName} required maxLength={100} />
           </label>
           <label>
-            Username
-            <input value={profile.username ?? 'Chưa thiết lập'} disabled readOnly />
-          </label>
-          <label>
             Email
             <input value={profile.email} disabled />
           </label>
@@ -275,14 +270,7 @@ export default function ProfilePage() {
 }
 
 function isProfile(value: unknown): value is Profile {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'email' in value &&
-    'username' in value &&
-    (value.username === null || typeof value.username === 'string') &&
-    'displayName' in value
-  );
+  return typeof value === 'object' && value !== null && 'email' in value && 'displayName' in value;
 }
 
 function readMessage(value: unknown): string | undefined {
