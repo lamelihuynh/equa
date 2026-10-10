@@ -60,6 +60,6 @@ The Vercel project deployment uses Vercel's `production` target internally becau
 
 ## Exact next action
 
-Cold cycle 2 and the user-confirmed Friends-page check passed; minimal public root/Gateway/Identity smoke also returned 200. Commit/push this final documentation update, wait for CI/Security, and verify provider revisions. Keep the full two-user E2E marked NOT COMPLETED and production NOT READY.
+Cold cycle 2 and the user-confirmed Friends-page check passed; minimal public root/Gateway/Identity smoke also returned 200. No automated staging action remains. Keep the full two-user E2E marked NOT COMPLETED and production NOT READY.
 
 An unrelated GitHub status context named `Vercel` remains failed for the separate `equa-web-staging` project in an inaccessible `equa1` scope. That project was not changed. The authorized `equa-staging-demo-web` deployment is READY from committed SHA `342c6af3e3363512aa1b61aeae9396dd304f59df`.

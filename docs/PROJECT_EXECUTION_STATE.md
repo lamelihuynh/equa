@@ -40,4 +40,4 @@ GitHub also reports a failing `Vercel` status context for a separate `equa-web-s
 
 ## Exact next action
 
-Commit/push this final documentation update, wait for CI/Security, and verify provider revisions. The minimal authenticated Friends check is user-confirmed PASS. Do not run another cold cycle or the full two-user E2E. Keep production NOT READY.
+No automated staging action remains. The authenticated Friends check is user-confirmed PASS and the class-test handoff is READY WITH KNOWN RISKS. Do not run another cold cycle or the full two-user E2E. Keep production NOT READY.

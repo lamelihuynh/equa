@@ -48,4 +48,4 @@ The reported forgot-password request returned 202. Identity intentionally gives 
 
 ## Exact next action
 
-Exact next action: commit/push this final documentation update, verify CI/Security and provider revisions, then hand off the class-test links. Cycle 1 remains partial and cycle 2 passed; do not run another cold cycle or the full two-user E2E. Production remains NOT READY.
+Exact next action: no automated staging action remains. The user confirmed the authenticated Friends page loads without a 502; class testing may proceed with the documented risks. Do not run another cold cycle or the full two-user E2E. Production remains NOT READY.
