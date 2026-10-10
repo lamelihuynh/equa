@@ -242,6 +242,13 @@ option {
   font-size: 13px;
   font-weight: 760;
 }
+.formStack .fieldHint {
+  margin: -8px 0 0;
+  color: #776a60;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
 .formStack input {
   width: 100%;
   height: 52px;

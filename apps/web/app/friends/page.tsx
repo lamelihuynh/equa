@@ -14,6 +14,7 @@ import {
 import { DemoShell } from '../components/demo-shell';
 import { humanIdentityLabel, humanIdentitySecondaryLabel } from '../identity-label';
 import { formatMinor } from '../money';
+import { FRIEND_LOOKUP_HELP_TEXT } from './lookup-copy';
 import {
   loadDemoState,
   newDemoId,
@@ -151,6 +152,7 @@ function LocalFriendsPage() {
                 placeholder="minh.anh@example.com"
               />
             </label>
+            <p className="fieldHint">{FRIEND_LOOKUP_HELP_TEXT}</p>
             <button className="primaryBtn" type="submit">
               Gửi lời mời
             </button>
@@ -346,6 +348,7 @@ function ApiFriendsPage() {
                 required
               />
             </label>
+            <p className="fieldHint">{FRIEND_LOOKUP_HELP_TEXT}</p>
             <button className="primaryBtn" type="submit" disabled={busy}>
               Gửi lời mời
             </button>
